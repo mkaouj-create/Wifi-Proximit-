@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, User, Building2, Download, Trash2, AlertTriangle, X, Tag, Wifi, Banknote, Clock, Phone } from 'lucide-react';
+import { Search, User, Building2, Download, Trash2, AlertTriangle, X, Tag, Wifi, Banknote, Clock, Phone, Share2, Copy, Check } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import { Sale, UserProfile, UserRole, Agency } from '../types';
 import { translations, Language } from '../i18n';
@@ -16,6 +16,7 @@ const SalesHistory: React.FC<SalesHistoryProps> = ({ user, lang }) => {
   const [search, setSearch] = useState('');
   const [saleToCancel, setSaleToCancel] = useState<Sale | null>(null);
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
+  const [copied, setCopied] = useState(false);
   const t = translations[lang];
 
   useEffect(() => {
@@ -36,19 +37,54 @@ const SalesHistory: React.FC<SalesHistoryProps> = ({ user, lang }) => {
     
     await supabase.cancelSale(saleToCancel.id);
     setSaleToCancel(null);
-    loadData(); // Recharger les données pour mettre à jour la liste
+    loadData();
     alert(t.saleCancelled);
   };
 
   const filteredSales = useMemo(() => {
     return sales.filter(s => 
-      s.ticket_username?.toLowerCase().includes(search.toLowerCase()) ||
-      s.seller_name?.toLowerCase().includes(search.toLowerCase()) ||
-      s.agency_name?.toLowerCase().includes(search.toLowerCase())
+      (s.ticket_username || '').toLowerCase().includes(search.toLowerCase()) ||
+      (s.seller_name || '').toLowerCase().includes(search.toLowerCase()) ||
+      (s.agency_name || '').toLowerCase().includes(search.toLowerCase())
     );
   }, [sales, search]);
 
   const currency = agency?.settings?.currency || 'GNF';
+
+  const getMessage = () => {
+    if (!selectedSale) return '';
+    const header = agency?.settings?.whatsapp_receipt_header || `*${t.appName}*`;
+    const dateStr = new Date(selectedSale.sold_at).toLocaleDateString(lang === 'fr' ? 'fr-FR' : 'en-US');
+    
+    return `${header}\n\n*HISTORIQUE TRANSACTION*\n📅 Date: ${dateStr}\n🎟 Code: *${selectedSale.ticket_username || 'N/A'}*\n💰 Prix: *${selectedSale.amount.toLocaleString()} ${currency}*\n⏳ Validité: *${selectedSale.ticket_time_limit || 'N/A'}*\n\nMerci de votre confiance !`;
+  };
+
+  const handleShareWhatsApp = () => {
+    if (!selectedSale) return;
+
+    const message = getMessage();
+    let phone = selectedSale.customer_phone || '';
+    
+    phone = phone.replace(/\D/g, '').replace(/^0+/, '');
+    
+    if (currency === 'GNF' && phone.length === 9) {
+        phone = '224' + phone;
+    }
+
+    const url = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  const handleCopy = async () => {
+    const message = getMessage();
+    try {
+      await navigator.clipboard.writeText(message);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy', err);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -102,8 +138,8 @@ const SalesHistory: React.FC<SalesHistoryProps> = ({ user, lang }) => {
                     title="Voir les détails"
                   >
                     <div className="flex flex-col group-hover:bg-primary-50 dark:group-hover:bg-primary-900/20 p-2 -ml-2 rounded-xl transition-colors">
-                      <span className="font-black text-primary-600 underline decoration-dotted underline-offset-4 group-hover:text-primary-700">{sale.ticket_username}</span>
-                      <span className="text-[10px] font-bold text-gray-400">{sale.ticket_profile}</span>
+                      <span className="font-black text-primary-600 underline decoration-dotted underline-offset-4 group-hover:text-primary-700">{sale.ticket_username || 'N/A'}</span>
+                      <span className="text-[10px] font-bold text-gray-400">{sale.ticket_profile || 'N/A'}</span>
                     </div>
                   </td>
                   <td className="px-6 py-4">
@@ -172,7 +208,7 @@ const SalesHistory: React.FC<SalesHistoryProps> = ({ user, lang }) => {
                        </div>
                        <div>
                            <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest">Code Wifi</p>
-                           <p className="font-black text-lg text-gray-900 dark:text-white">{selectedSale.ticket_username}</p>
+                           <p className="font-black text-lg text-gray-900 dark:text-white">{selectedSale.ticket_username || 'N/A'}</p>
                        </div>
                    </div>
 
@@ -205,6 +241,23 @@ const SalesHistory: React.FC<SalesHistoryProps> = ({ user, lang }) => {
                            <p className="font-bold text-gray-900 dark:text-white">{selectedSale.customer_phone || 'Non renseigné'}</p>
                        </div>
                    </div>
+               </div>
+
+               <div className="flex gap-3 mt-6">
+                 <button 
+                    onClick={handleCopy}
+                    className="flex-1 py-4 bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white rounded-2xl font-black text-sm uppercase tracking-widest active:scale-95 transition-all flex items-center justify-center gap-2 hover:bg-gray-200 dark:hover:bg-gray-600"
+                 >
+                    {copied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+                    {t.copyCode}
+                 </button>
+                 <button 
+                    onClick={handleShareWhatsApp}
+                    className="flex-1 py-4 bg-green-500 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-green-500/20 active:scale-95 transition-all flex items-center justify-center gap-2 hover:bg-green-600"
+                 >
+                    <Share2 className="w-4 h-4" />
+                    {t.whatsapp}
+                 </button>
                </div>
            </div>
         </div>

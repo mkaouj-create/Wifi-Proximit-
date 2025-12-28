@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { TrendingUp, ShoppingBag, Database, Users, Building2 } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import { UserProfile, UserRole } from '../types';
@@ -12,9 +12,25 @@ interface DashboardProps {
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ user, lang, onNavigate }) => {
-  const stats = supabase.getStats(user.agency_id, user.role);
+  const [stats, setStats] = useState({
+    revenue: 0,
+    soldCount: 0,
+    stockCount: 0,
+    agencyCount: 0,
+    userCount: 0,
+    currency: 'GNF'
+  });
+
   const t = translations[lang];
   const isSuper = user.role === UserRole.SUPER_ADMIN;
+
+  useEffect(() => {
+    const loadStats = async () => {
+      const data = await supabase.getStats(user.agency_id, user.role);
+      setStats(data);
+    };
+    loadStats();
+  }, [user.agency_id, user.role]);
 
   return (
     <div className="space-y-6">

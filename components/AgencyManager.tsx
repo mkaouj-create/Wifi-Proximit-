@@ -262,6 +262,7 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang }) => {
                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-2">{t.agencyName}</label>
                 <input 
                   type="text" 
+                  autoFocus
                   className="w-full px-7 py-5 bg-gray-50 dark:bg-gray-900 border-none rounded-2xl focus:ring-4 focus:ring-primary-500/10 font-bold"
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}

@@ -71,24 +71,43 @@ const TicketManager: React.FC<TicketManagerProps> = ({ user, lang }) => {
     const reader = new FileReader();
     reader.onload = async (event) => {
       const text = event.target?.result as string;
-      const lines = text.split('\n').filter(l => l.trim().length > 0);
+      // Normalisation des retours à la ligne
+      const lines = text.replace(/\r\n/g, '\n').split('\n').filter(l => l.trim().length > 0);
       
       const rows = lines.slice(1).map(line => {
-        const parts = line.split(/[;,]/);
-        if (parts.length < 3) return null;
+        // Nettoyage des guillemets et split intelligent (virgule ou point-virgule)
+        const clean = (val: string) => val ? val.replace(/^["']|["']$/g, '').trim() : '';
+        const parts = line.split(/[;,]/).map(clean);
+        
+        if (parts.length < 2) return null; // Ignorer les lignes trop courtes
+
+        // Mapping standard CSV Mikhmon: Username, Password, Profile, TimeLimit, Price...
+        // Si le prix est absent ou invalide, on met 0
+        const rawPrice = parts[4] || '0';
+        let price = parseInt(rawPrice);
+        if (isNaN(price)) price = 0;
+
         return {
-          username: parts[0]?.replace(/"/g, '').trim(),
-          password: parts[1]?.replace(/"/g, '').trim() || '',
-          profile: parts[2]?.replace(/"/g, '').trim() || 'Default',
-          time_limit: parts[3]?.replace(/"/g, '').trim() || '',
-          price: parseInt(parts[4]?.replace(/"/g, '').trim() || '0'),
-          expire_at: parts[5]?.replace(/"/g, '').trim()
+          username: parts[0],
+          password: parts[1] || '',
+          profile: parts[2] || 'Default',
+          time_limit: parts[3] || '',
+          price: price,
+          expire_at: parts[5] // Le service s'occupera de valider si c'est une date
         } as Partial<Ticket>;
       }).filter(item => item && item.username) as Partial<Ticket>[];
+
+      if (rows.length === 0) {
+          alert(lang === 'fr' ? "Aucun ticket valide trouvé dans le fichier." : "No valid tickets found in file.");
+          return;
+      }
 
       const res = await supabase.importTickets(rows, user.id, targetAgency);
       setImportStatus(res);
       loadTickets();
+      
+      // Reset input file
+      e.target.value = '';
     };
     reader.readAsText(file);
   };
@@ -115,17 +134,36 @@ const TicketManager: React.FC<TicketManagerProps> = ({ user, lang }) => {
   const handleBulkPriceUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedProfile || !newPrice) return;
+    
     const price = parseInt(newPrice);
-    if (!isNaN(price)) {
-        // Pour SuperAdmin: utilise l'agence actuellement filtrée ou par défaut l'agence de l'user
-        const targetAgencyId = (isSuperAdmin && selectedAgencyFilter !== 'ALL') ? selectedAgencyFilter : user.agency_id;
-        
-        await supabase.updateProfilePrices(targetAgencyId, selectedProfile, price);
-        setShowBulkEdit(false);
-        setNewPrice('');
-        setSelectedProfile('');
-        loadTickets();
+    if (isNaN(price)) return;
+
+    // Détermination de l'agence cible
+    let targetAgencyId = user.agency_id;
+    
+    if (isSuperAdmin) {
+        if (selectedAgencyFilter !== 'ALL') {
+            targetAgencyId = selectedAgencyFilter;
+        } else {
+            // Sécurité : Pour modifier en masse, un Super Admin doit cibler une agence spécifique
+            // sinon on risque de modifier le profil "1H" de toutes les agences en même temps, ce qui est rarement souhaité.
+            alert(lang === 'fr' 
+                ? "Veuillez d'abord filtrer par une agence spécifique en haut de page pour modifier les prix en masse." 
+                : "Please filter by a specific agency first to bulk update prices.");
+            return;
+        }
     }
+
+    const count = await supabase.updateProfilePrices(targetAgencyId, selectedProfile, price);
+    
+    alert(lang === 'fr' 
+        ? `${count} tickets du profil "${selectedProfile}" ont été mis à jour à ${price.toLocaleString()} GNF.` 
+        : `${count} tickets of profile "${selectedProfile}" successfully updated.`);
+
+    setShowBulkEdit(false);
+    setNewPrice('');
+    setSelectedProfile('');
+    loadTickets();
   };
 
   const filtered = tickets.filter(ticket => {
@@ -332,7 +370,7 @@ const TicketManager: React.FC<TicketManagerProps> = ({ user, lang }) => {
                     <p className="text-3xl font-black text-green-600">{importStatus.success}</p>
                   </div>
                   <div className="bg-gray-50 dark:bg-gray-900/50 p-5 rounded-[1.5rem] border border-gray-100 dark:border-gray-700">
-                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Doublons</p>
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Ignorés / Erreurs</p>
                     <p className="text-3xl font-black text-amber-600">{importStatus.errors}</p>
                   </div>
                 </div>
@@ -341,7 +379,7 @@ const TicketManager: React.FC<TicketManagerProps> = ({ user, lang }) => {
             ) : (
               <div className="space-y-8 text-center">
                 <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-2xl text-xs text-blue-600 dark:text-blue-400 font-medium">
-                  Exportez vos tickets depuis Mikhmon au format CSV et importez-les ici pour les vendre.
+                  Exportez vos tickets depuis Mikhmon (CSV) et importez-les ici. Les doublons seront ignorés.
                 </div>
 
                 {isSuperAdmin && (
@@ -370,7 +408,7 @@ const TicketManager: React.FC<TicketManagerProps> = ({ user, lang }) => {
                   <div className="p-5 bg-gray-50 dark:bg-gray-900 rounded-3xl group-hover:scale-110 transition-transform mb-4">
                     <FileUp className="w-10 h-10 text-primary-500" />
                   </div>
-                  <p className="text-xs font-black text-gray-400 uppercase tracking-widest">{lang === 'fr' ? 'Sélectionner le fichier' : 'Select file'}</p>
+                  <p className="text-xs font-black text-gray-400 uppercase tracking-widest">{lang === 'fr' ? 'Sélectionner le fichier CSV' : 'Select CSV file'}</p>
                   <input type="file" className="hidden" accept=".csv" onChange={handleImport} disabled={isSuperAdmin && !importAgencyId} />
                 </label>
               </div>
