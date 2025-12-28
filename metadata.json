@@ -1,0 +1,7 @@
+{
+  "name": "Wifi Proximité",
+  "description": "Système professionnel multi-utilisateur de gestion de tickets WiFi. Import CSV, suivi des ventes et tableaux de bord en temps réel.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
