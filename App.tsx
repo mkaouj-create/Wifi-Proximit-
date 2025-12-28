@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, ShoppingBag, Database, Users, LogOut, Lock, Sun, Moon, History, Settings, Building2, ChevronRight, Eye, EyeOff, KeyRound, Loader2, ClipboardList } from 'lucide-react';
+import { LayoutDashboard, ShoppingBag, Database, Users, LogOut, Lock, Sun, Moon, History, Settings, Building2, ChevronRight, Eye, EyeOff, KeyRound, Loader2, ClipboardList, Power } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import TicketManager from './components/TicketManager';
 import SalesTerminal from './components/SalesTerminal';
@@ -242,6 +242,13 @@ const App: React.FC = () => {
       {/* Mobile Header */}
       <header className="sticky top-0 z-40 bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border-b border-gray-100 dark:border-gray-800 p-5 flex items-center justify-between lg:hidden">
         <div className="flex items-center gap-4">
+          <button 
+            onClick={handleLogout} 
+            className="p-3 bg-red-50 dark:bg-red-900/20 text-red-500 rounded-2xl active:scale-90 transition-all shadow-sm border border-red-100 dark:border-red-900/30 flex items-center justify-center"
+            title={t.logout}
+          >
+            <Power className="w-5 h-5" />
+          </button>
           <div className="w-10 h-10 bg-primary-600 rounded-xl flex items-center justify-center text-white font-black text-lg shadow-xl shadow-primary-500/30">W</div>
           <div>
             <h1 className="font-black text-sm text-gray-900 dark:text-white tracking-tight">{t.appName}</h1>
@@ -261,9 +268,19 @@ const App: React.FC = () => {
       {/* Modern Sidebar */}
       <aside className="hidden lg:flex fixed left-0 top-0 bottom-0 w-[300px] bg-white dark:bg-gray-900 border-r border-gray-100 dark:border-gray-800 flex-col z-50 overflow-hidden">
         <div className="p-8 pb-10">
-          <div className="flex items-center gap-4 mb-10">
-            <div className="w-12 h-12 bg-primary-600 rounded-2xl flex items-center justify-center text-white font-black text-2xl shadow-2xl shadow-primary-500/40">W</div>
-            <h1 className="font-black text-2xl tracking-tighter dark:text-white leading-none">Wifi <span className="text-primary-600">Pro</span></h1>
+          <div className="flex items-center justify-between mb-10">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-primary-600 rounded-2xl flex items-center justify-center text-white font-black text-2xl shadow-2xl shadow-primary-500/40">W</div>
+              <h1 className="font-black text-2xl tracking-tighter dark:text-white leading-none">Wifi <span className="text-primary-600">Pro</span></h1>
+            </div>
+            {/* Nouveau bouton déconnexion Desktop Top-Left (dans le header de la sidebar) */}
+            <button 
+              onClick={handleLogout}
+              className="p-2.5 bg-red-50 dark:bg-red-900/10 text-red-500 rounded-xl hover:bg-red-100 dark:hover:bg-red-900/20 transition-all active:scale-90"
+              title={t.logout}
+            >
+              <Power className="w-4 h-4" />
+            </button>
           </div>
           
           <div className="space-y-1.5">
@@ -316,9 +333,6 @@ const App: React.FC = () => {
              </button>
              <button onClick={() => setPinLocked(true)} className="flex-1 p-3.5 bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 text-gray-500 hover:text-primary-600 transition-all flex items-center justify-center">
                <Lock className="w-4 h-4" />
-             </button>
-             <button onClick={handleLogout} className="flex-1 p-3.5 bg-red-50 dark:bg-red-900/10 rounded-2xl text-red-500 transition-all flex items-center justify-center">
-               <LogOut className="w-4 h-4" />
              </button>
            </div>
         </div>
