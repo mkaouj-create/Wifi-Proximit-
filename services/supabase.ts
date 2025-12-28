@@ -1,14 +1,35 @@
-import { createClient } from '@supabase/supabase-js';
-import { UserRole, TicketStatus, UserProfile, Ticket, Sale, ActivityLog, Agency, AgencyStatus, AgencyModules, Task, AgencySettings } from '../types';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { UserRole, TicketStatus, UserProfile, Ticket, Sale, ActivityLog, Agency, AgencyStatus, AgencyModules, AgencySettings } from '../types';
 
-// --- CONFIGURATION ---
-const SUPABASE_URL = 'https://gqenaxalqkdaoylhwzoq.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_ndkp28zh6qF0Ixm740HD4g_V-1Ew2vw';
+// --- CONFIGURATION SÉCURISÉE ---
+// Helper pour accéder aux variables d'environnement de manière sécurisée
+const getEnv = (key: string) => {
+  // @ts-ignore
+  if (typeof import.meta !== 'undefined' && import.meta.env) {
+    // @ts-ignore
+    return import.meta.env[key] || '';
+  }
+  return '';
+};
 
-// NOTE DE SECURITÉ : On n'utilise JAMAIS la "Secret API Key" (service_role) côté client (navigateur).
-// Elle donnerait tous les droits à n'importe qui. On utilise uniquement la clé publique (Anon Key).
+const SUPABASE_URL = getEnv('VITE_SUPABASE_URL');
+const SUPABASE_ANON_KEY = getEnv('VITE_SUPABASE_ANON_KEY');
 
-const client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+let client: SupabaseClient;
+
+// Initialisation robuste pour éviter le crash de l'application si les clés manquent
+try {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    console.warn("⚠️ Supabase credentials missing. App running in offline/demo mode.");
+    // Initialisation avec des valeurs factices valides syntaxiquement pour éviter le crash "supabaseUrl is required"
+    client = createClient('https://placeholder.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.signature');
+  } else {
+    client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  }
+} catch (e) {
+  console.error("Supabase Client Init Error:", e);
+  client = createClient('https://placeholder.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.signature');
+}
 
 const DEFAULT_MODULES: AgencyModules = {
   dashboard: true,
@@ -21,17 +42,17 @@ const DEFAULT_MODULES: AgencyModules = {
 
 class SupabaseService {
   
-  // --- AUTHENTIFICATION (Basée sur la table profiles customisée) ---
+  // --- AUTHENTIFICATION ---
   
   async signIn(email: string, password?: string): Promise<UserProfile | null> {
+    if (!SUPABASE_URL) return null; // Fail fast if no config
+
     try {
-      // Note: Pour une sécurité optimale en prod, migrez vers supabase.auth.signInWithPassword
-      // Ici on garde votre logique personnalisée basée sur la table 'profiles'
       const { data, error } = await client
         .from('profiles')
         .select('*')
         .eq('email', email)
-        .eq('password', password) // Comparaison directe (Hashage recommandé en prod)
+        .eq('password', password)
         .single();
 
       if (error || !data) {
@@ -49,11 +70,12 @@ class SupabaseService {
   }
 
   async signOut(user: UserProfile): Promise<void> {
+    if (!SUPABASE_URL) return;
     await this.log(user, 'LOGOUT', 'Déconnexion du système');
-    // Si on utilisait Supabase Auth: await client.auth.signOut();
   }
 
   async verifyPin(userId: string, pinAttempt: string): Promise<boolean> {
+    if (!SUPABASE_URL) return false;
     const { data } = await client
       .from('profiles')
       .select('pin')
@@ -66,6 +88,7 @@ class SupabaseService {
   // --- LOGGING ---
 
   private async log(user: {id: string, display_name: string, agency_id: string}, action: string, details: string) {
+    if (!SUPABASE_URL) return;
     await client.from('logs').insert({
       user_id: user.id,
       user_name: user.display_name,
@@ -77,6 +100,7 @@ class SupabaseService {
   }
 
   async getLogs(agencyId: string, role: UserRole): Promise<ActivityLog[]> {
+    if (!SUPABASE_URL) return [];
     let query = client.from('logs').select('*').order('created_at', { ascending: false }).limit(100);
     
     if (role !== UserRole.SUPER_ADMIN) {
@@ -90,6 +114,7 @@ class SupabaseService {
   // --- TICKETS ---
 
   async getTickets(agencyId: string, role: UserRole): Promise<Ticket[]> {
+    if (!SUPABASE_URL) return [];
     let query = client.from('tickets').select('*');
     
     if (role !== UserRole.SUPER_ADMIN) {
@@ -101,11 +126,11 @@ class SupabaseService {
   }
 
   async importTickets(tickets: Partial<Ticket>[], userId: string, agencyId: string): Promise<{ success: number; errors: number }> {
-    // Nettoyage préalable : on garde seulement les entrées avec username
+    if (!SUPABASE_URL) return { success: 0, errors: tickets.length };
+    
     const validTickets = tickets.filter(t => t.username);
     const usernames = validTickets.map(t => t.username!);
 
-    // Vérification des doublons par lots (Batching)
     const BATCH_SIZE = 500;
     const existingSet = new Set<string>();
 
@@ -124,11 +149,9 @@ class SupabaseService {
         }
     }
 
-    // Préparation des données à insérer
     const toInsert = validTickets
       .filter(t => !existingSet.has(t.username!))
       .map(t => {
-        // Gestion robuste de la date d'expiration
         let validExpireAt = null;
         if (t.expire_at) {
             const d = new Date(t.expire_at);
@@ -137,11 +160,8 @@ class SupabaseService {
             }
         }
         
-        // CORRECTION ERROR 22003 (Numeric Overflow)
-        // La BDD est en numeric(10,2), max = 99,999,999.99
         let safePrice = 0;
         if (typeof t.price === 'number' && !isNaN(t.price)) {
-            // On cap à 99 millions pour éviter le crash si erreur de parsing (ex: code barre lu comme prix)
             safePrice = Math.min(Math.abs(t.price), 99999999); 
         }
 
@@ -159,7 +179,6 @@ class SupabaseService {
         };
       });
 
-    // Insertion par lots
     let successCount = 0;
     let insertErrors = 0;
 
@@ -176,7 +195,6 @@ class SupabaseService {
             }
         }
 
-        // Log seulement si succès partiel ou total
         if (successCount > 0) {
              const { data: userData } = await client.from('profiles').select('display_name').eq('id', userId).single();
              if (userData) {
@@ -189,7 +207,6 @@ class SupabaseService {
         }
     }
 
-    // Total erreurs = (total entrées - insérés avec succès)
     return { 
       success: successCount, 
       errors: validTickets.length - successCount 
@@ -197,7 +214,7 @@ class SupabaseService {
   }
 
   async updateTicketPrice(ticketId: string, newPrice: number): Promise<boolean> {
-    // Sécurité aussi pour la mise à jour manuelle
+    if (!SUPABASE_URL) return false;
     const safePrice = Math.min(Math.abs(newPrice), 99999999);
     
     const { error } = await client
@@ -208,7 +225,7 @@ class SupabaseService {
   }
   
   async updateProfilePrices(agencyId: string, profile: string, newPrice: number): Promise<number> {
-    // Sécurité aussi pour la mise à jour de masse
+    if (!SUPABASE_URL) return 0;
     const safePrice = Math.min(Math.abs(newPrice), 99999999);
 
     const { data, error } = await client
@@ -217,7 +234,7 @@ class SupabaseService {
       .eq('agency_id', agencyId)
       .eq('profile', profile)
       .eq('status', TicketStatus.UNSOLD)
-      .select(); // Pour savoir combien ont été modifiés
+      .select();
 
     if (!error) {
          this.log({id: 'system', display_name: 'Système', agency_id: agencyId}, 'TICKET_UPDATE', `Mise à jour prix profil ${profile} à ${safePrice}`);
@@ -227,9 +244,8 @@ class SupabaseService {
   }
 
   async deleteTicket(ticketId: string): Promise<boolean> {
-    // Récupérer infos pour le log avant suppression
+    if (!SUPABASE_URL) return false;
     const { data: ticket } = await client.from('tickets').select('*').eq('id', ticketId).single();
-    
     const { error } = await client.from('tickets').delete().eq('id', ticketId);
     
     if (!error && ticket) {
@@ -241,7 +257,7 @@ class SupabaseService {
   // --- VENTES ---
 
   async sellTicket(ticketId: string, sellerId: string, agencyId: string, phone?: string): Promise<Sale | null> {
-    // 1. Récupérer le ticket et vérifier
+    if (!SUPABASE_URL) return null;
     const { data: ticket } = await client
         .from('tickets')
         .select('*')
@@ -253,7 +269,6 @@ class SupabaseService {
 
     const { data: seller } = await client.from('profiles').select('*').eq('id', sellerId).single();
     
-    // 2. Mettre à jour le ticket
     const now = new Date().toISOString();
     const { error: updateError } = await client
         .from('tickets')
@@ -266,10 +281,6 @@ class SupabaseService {
 
     if (updateError) return null;
 
-    // 3. Créer la vente
-    // CORRECTION CRITIQUE : On ne stocke QUE les IDs et le montant dans 'sales'.
-    // Les colonnes ticket_username, ticket_profile, etc. sont supprimées de l'insert
-    // car elles n'existent pas dans la BDD, ce qui causait l'erreur [object Object].
     const saleData = {
         ticket_id: ticketId,
         agency_id: agencyId,
@@ -287,8 +298,7 @@ class SupabaseService {
         .single();
 
     if (saleError) {
-        console.error("Erreur création vente (Détails):", JSON.stringify(saleError));
-        // En cas d'erreur critique, on essaie d'annuler la mise à jour du ticket (Rollback manuel)
+        console.error("Erreur création vente:", JSON.stringify(saleError));
         await client.from('tickets').update({ status: TicketStatus.UNSOLD, sold_by: null, sold_at: null }).eq('id', ticketId);
         return null;
     }
@@ -297,11 +307,10 @@ class SupabaseService {
         this.log(seller, 'SALE', `Vente ticket ${ticket.username} (${ticket.profile})`);
     }
 
-    // On retourne un objet Sale complet pour l'UI, en combinant les données insérées et les données du ticket qu'on a déjà
     return {
         ...sale,
         seller_name: seller?.display_name || 'Inconnu',
-        agency_name: '...', // Pas critique pour l'instant T
+        agency_name: '...',
         ticket_username: ticket.username,
         ticket_profile: ticket.profile,
         ticket_time_limit: ticket.time_limit
@@ -309,11 +318,10 @@ class SupabaseService {
   }
 
   async cancelSale(saleId: string): Promise<boolean> {
-    // 1. Récupérer la vente
+    if (!SUPABASE_URL) return false;
     const { data: sale } = await client.from('sales').select('*').eq('id', saleId).single();
     if (!sale) return false;
 
-    // 2. Remettre le ticket en stock
     if (sale.ticket_id) {
         await client.from('tickets').update({
             status: TicketStatus.UNSOLD,
@@ -322,7 +330,6 @@ class SupabaseService {
         }).eq('id', sale.ticket_id);
     }
 
-    // 3. Supprimer la vente
     await client.from('sales').delete().eq('id', saleId);
 
     this.log({id: 'admin', display_name: 'Admin', agency_id: sale.agency_id}, 'SALE_CANCEL', `Annulation vente ID ${saleId}`);
@@ -330,8 +337,7 @@ class SupabaseService {
   }
 
   async getSales(agencyId: string, role: UserRole): Promise<Sale[]> {
-    // CORRECTION : On récupère les infos du ticket (username, profile) via la relation `tickets`.
-    // Cela remplace les colonnes "vides" de la table sales et évite les erreurs de données manquantes.
+    if (!SUPABASE_URL) return [];
     let query = client
         .from('sales')
         .select(`
@@ -355,12 +361,10 @@ class SupabaseService {
     
     if (!data) return [];
 
-    // Mapping pour aplatir la structure retournée par Supabase
     return data.map((s: any) => ({
         ...s,
         seller_name: s.profiles?.display_name || 'Inconnu',
         agency_name: s.agencies?.name || 'Inconnue',
-        // Fallback: si le ticket a été supprimé physiquement (rare), on gère le null
         ticket_username: s.tickets?.username || 'Ticket Inconnu',
         ticket_profile: s.tickets?.profile || 'N/A',
         ticket_time_limit: s.tickets?.time_limit || 'N/A'
@@ -370,10 +374,10 @@ class SupabaseService {
   // --- STATS ---
   
   async getStats(agencyId: string, role: UserRole) {
-    // Note: Pour de la grosse prod, utiliser des RPC (Stored Procedures) pour les stats
+    if (!SUPABASE_URL) return { revenue: 0, soldCount: 0, stockCount: 0, agencyCount: 0, userCount: 0, currency: 'GNF' };
+
     const isSuper = role === UserRole.SUPER_ADMIN;
     
-    // Récupérer les données brutes (Attention performance si beaucoup de données)
     let salesQuery = client.from('sales').select('amount, agency_id');
     let ticketsQuery = client.from('tickets').select('status, agency_id');
     let usersQuery = client.from('profiles').select('id, agency_id, role');
@@ -409,16 +413,19 @@ class SupabaseService {
   // --- AGENCES ---
 
   async getAgencies(): Promise<Agency[]> {
+    if (!SUPABASE_URL) return [];
     const { data } = await client.from('agencies').select('*').order('created_at');
     return (data as Agency[]) || [];
   }
 
   async getAgency(id: string): Promise<Agency | null> {
+    if (!SUPABASE_URL) return null;
     const { data } = await client.from('agencies').select('*').eq('id', id).single();
     return data as Agency;
   }
 
   async addAgency(name: string): Promise<Agency> {
+    if (!SUPABASE_URL) throw new Error("No backend");
     const newAgency = {
       name,
       status: 'active',
@@ -440,10 +447,12 @@ class SupabaseService {
   }
 
   async deleteAgency(id: string): Promise<void> {
+    if (!SUPABASE_URL) return;
     await client.from('agencies').delete().eq('id', id);
   }
 
   async updateAgency(id: string, name: string, settings: Partial<AgencySettings>, status?: AgencyStatus): Promise<void> {
+    if (!SUPABASE_URL) return;
     const updates: any = { name, settings };
     if (status) updates.status = status;
 
@@ -455,12 +464,11 @@ class SupabaseService {
   // --- UTILISATEURS ---
 
   async getUsers(agencyId: string, role: UserRole): Promise<UserProfile[]> {
+    if (!SUPABASE_URL) return [];
     let query = client.from('profiles').select('*');
     
     if (role !== UserRole.SUPER_ADMIN) {
       query = query.eq('agency_id', agencyId).neq('role', UserRole.SUPER_ADMIN);
-    } else {
-        // Super admin voit tout le monde sauf les mots de passe (déjà filtré par select mais on est prudent)
     }
     
     const { data } = await query;
@@ -468,6 +476,7 @@ class SupabaseService {
   }
 
   async addUser(user: Partial<UserProfile> & {password?: string, pin?: string}): Promise<UserProfile> {
+    if (!SUPABASE_URL) throw new Error("No backend");
     const newUser = {
       email: user.email,
       password: user.password || '123456',
@@ -488,6 +497,7 @@ class SupabaseService {
   }
 
   async updateUserRole(userId: string, newRole: UserRole): Promise<boolean> {
+    if (!SUPABASE_URL) return false;
     const { error } = await client.from('profiles').update({ role: newRole }).eq('id', userId);
     return !error;
   }
