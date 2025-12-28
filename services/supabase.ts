@@ -228,6 +228,7 @@ class SupabaseService {
     if (!supabaseUrl) return { revenue: 0, soldCount: 0, stockCount: 0, agencyCount: 0, userCount: 0, currency: 'GNF' };
     const isSuper = role === UserRole.SUPER_ADMIN;
     
+    // On utilise Promise.all pour paralléliser les requêtes
     const [salesRes, ticketsRes, usersRes, agencyRes] = await Promise.all([
         isSuper ? client.from('sales').select('amount') : client.from('sales').select('amount').eq('agency_id', agencyId),
         isSuper ? client.from('tickets').select('status') : client.from('tickets').select('status').eq('agency_id', agencyId),
@@ -238,8 +239,10 @@ class SupabaseService {
     const sales = salesRes.data || [];
     const tickets = ticketsRes.data || [];
     const users = usersRes.data || [];
-    const agencies = isSuper ? (agencyRes.data || []) : [];
-    const currentAgency = isSuper ? null : agencyRes.data;
+    
+    // FIX: Cast explicite pour gérer l'union type de agencyRes.data (tableau ou objet unique)
+    const agencies = isSuper ? (agencyRes.data as any[] || []) : [];
+    const currentAgency = isSuper ? null : (agencyRes.data as any);
 
     return {
       revenue: sales.reduce((sum: number, s: any) => sum + s.amount, 0),
@@ -247,7 +250,7 @@ class SupabaseService {
       stockCount: tickets.filter((t: any) => t.status === TicketStatus.UNSOLD).length,
       agencyCount: isSuper ? agencies.length : 1,
       userCount: users.length,
-      currency: (isSuper ? 'GNF' : (currentAgency as any)?.settings?.currency) || 'GNF'
+      currency: (isSuper ? 'GNF' : currentAgency?.settings?.currency) || 'GNF'
     };
   }
 
