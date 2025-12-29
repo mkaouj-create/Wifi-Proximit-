@@ -48,24 +48,49 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language }> = ({ user, 
     const reader = new FileReader();
     reader.onload = async (ev) => {
       const text = ev.target?.result as string;
-      const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0).slice(1);
+      const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
       
-      const rows = lines.map(line => {
-        // Support virgule ou point-virgule et nettoyage des quotes
+      if (lines.length < 2) {
+          alert("Fichier vide ou invalide.");
+          setLoading(false);
+          return;
+      }
+
+      // 1. Analyse des en-têtes (Headers)
+      const headers = lines[0].toLowerCase().split(/[;,]/).map(h => h.trim().replace(/^["']|["']$/g, ''));
+      const dataLines = lines.slice(1);
+
+      // Mapping d'index dynamique basé sur les mots-clés Mikhmon standards
+      const idx = {
+        user: headers.findIndex(h => h.includes('user') || h.includes('name') || h === 'code' || h === 'login' || h === 'identifiant'),
+        pass: headers.findIndex(h => h.includes('pass') || h === 'pwd' || h === 'mot de passe'),
+        prof: headers.findIndex(h => h.includes('prof') || h === 'forfait' || h === 'plan'),
+        limit: headers.findIndex(h => h.includes('limit') || h.includes('time') || h.includes('valid') || h === 'uptime'),
+        price: headers.findIndex(h => h.includes('price') || h.includes('prix') || h === 'amount' || h === 'tarif')
+      };
+
+      // 2. Traitement des lignes de données
+      const rows = dataLines.map(line => {
         const p = line.split(/[;,]/).map(v => v.replace(/^["']|["']$/g, '').trim());
         return { 
-            username: p[0], 
-            password: p[1] || '', 
-            profile: p[2] || 'Default', 
-            time_limit: p[3] || 'N/A', 
-            price: parseInt(p[4]) || 0 
+            username: idx.user !== -1 ? p[idx.user] : p[0], 
+            password: idx.pass !== -1 ? p[idx.pass] : p[1] || '', 
+            profile: idx.prof !== -1 ? p[idx.prof] : p[2] || 'Default', 
+            time_limit: idx.limit !== -1 ? p[idx.limit] : p[3] || 'N/A', 
+            price: idx.price !== -1 ? (parseInt(p[idx.price]) || 0) : (parseInt(p[4]) || 0) 
         };
       }).filter(r => r.username && r.username.length > 0);
 
-      const target = isSuper ? (document.getElementById('importAid') as HTMLSelectElement).value : user.agency_id;
-      const res = await supabase.importTickets(rows, user.id, target);
+      if (rows.length === 0) {
+          alert("Aucune donnée valide trouvée dans le fichier.");
+          setLoading(false);
+          return;
+      }
+
+      const targetAgency = isSuper ? (document.getElementById('importAid') as HTMLSelectElement).value : user.agency_id;
+      const res = await supabase.importTickets(rows, user.id, targetAgency);
       
-      alert(`${res.success} tickets synchronisés.`);
+      alert(`${res.success} nouveaux tickets importés. ${res.skipped} doublons ignorés.`);
       setShowImport(false);
       loadData();
     };
@@ -95,7 +120,7 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language }> = ({ user, 
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-2xl font-black dark:text-white">{t.inventory}</h2>
-          <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest">{filtered.length} tickets filtrés</p>
+          <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest">{filtered.length} tickets visibles</p>
         </div>
         <div className="flex gap-2">
             {user.role !== UserRole.SELLER && (
@@ -135,7 +160,7 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language }> = ({ user, 
         {loading ? (
           <div className="p-20 flex flex-col items-center gap-4">
             <Loader2 className="animate-spin text-primary-600" size={40}/>
-            <p className="text-[10px] font-black text-gray-400 uppercase">Synchronisation...</p>
+            <p className="text-[10px] font-black text-gray-400 uppercase">Chargement en cours...</p>
           </div>
         ) : (
           <div className="overflow-x-auto no-scrollbar">
@@ -150,12 +175,12 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language }> = ({ user, 
                     <td className="px-6 py-4"><span className="px-3 py-1 bg-gray-100 dark:bg-gray-700 rounded-lg font-bold text-[10px]">{tk.profile}</span></td>
                     <td className="px-6 py-4 text-right font-black dark:text-white">{tk.price.toLocaleString()}</td>
                     <td className="px-6 py-4 text-center">
-                        <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-tighter ${tk.status === 'UNSOLD' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
-                            {tk.status === 'UNSOLD' ? 'STOCK' : 'VENDU'}
+                        <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-tighter ${tk.status === TicketStatus.UNSOLD ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
+                            {tk.status === TicketStatus.UNSOLD ? 'STOCK' : 'VENDU'}
                         </span>
                     </td>
                     <td className="px-6 py-4 text-right">
-                      {tk.status === 'UNSOLD' && user.role !== UserRole.SELLER && (
+                      {tk.status === TicketStatus.UNSOLD && user.role !== UserRole.SELLER && (
                         <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button onClick={() => { setEditingTicket(tk); setNewPrice(tk.price.toString()); }} className="p-2 text-primary-600 bg-primary-50 rounded-lg"><Edit2 size={14}/></button>
                           <button onClick={async () => { if(confirm(t.confirmDeleteTicket)) { await supabase.deleteTicket(tk.id); loadData(); } }} className="p-2 text-red-500 bg-red-50 rounded-lg"><Trash2 size={14}/></button>
@@ -178,7 +203,7 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language }> = ({ user, 
             <div className="bg-gray-50 dark:bg-gray-900 p-4 rounded-2xl mb-6 flex gap-3 items-start border border-gray-100 dark:border-gray-800">
                 <AlertTriangle size={18} className="text-amber-500 shrink-0" />
                 <p className="text-[10px] text-gray-400 font-bold uppercase leading-relaxed">
-                    Format attendu : code, mot_de_passe, profil, validité, prix.<br/>Le séparateur peut être une virgule ou un point-virgule.
+                    Importation Mikhmon : Le système détecte automatiquement les colonnes 'username', 'profile', 'price' et 'limit'.<br/>Les doublons existants dans votre agence seront ignorés.
                 </p>
             </div>
             {isSuper && (
@@ -186,7 +211,7 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language }> = ({ user, 
               <select id="importAid" className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl outline-none font-bold mt-1 dark:text-white">{agencies.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
             )}
             <input type="file" accept=".csv" onChange={handleImport} className="w-full p-8 border-4 border-dashed rounded-[2rem] text-center font-bold text-gray-400 cursor-pointer hover:border-primary-500 transition-colors" />
-            <button onClick={() => setShowImport(false)} className="w-full mt-6 py-4 bg-gray-100 dark:bg-gray-700 rounded-2xl font-black uppercase tracking-widest text-[10px]">Annuler l'import</button>
+            <button onClick={() => setShowImport(false)} className="w-full mt-6 py-4 bg-gray-100 dark:bg-gray-700 rounded-2xl font-black uppercase tracking-widest text-[10px]">Annuler</button>
           </div>
         </div>
       )}
