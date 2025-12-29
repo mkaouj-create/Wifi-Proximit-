@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { LayoutDashboard, ShoppingBag, Database, Users, Lock, Sun, Moon, History, Settings, Building2, ChevronRight, Eye, EyeOff, KeyRound, Loader2, ClipboardList, Power } from 'lucide-react';
+import { LayoutDashboard, ShoppingBag, Database, Users, Lock, Sun, Moon, History, Settings, Building2, ChevronRight, Eye, EyeOff, KeyRound, Loader2, ClipboardList, Power, AlertTriangle, ShieldAlert } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import TicketManager from './components/TicketManager';
 import SalesTerminal from './components/SalesTerminal';
@@ -54,6 +54,7 @@ const App: React.FC = () => {
     if (user) await supabase.signOut(user);
     setUser(null);
     setPinLocked(false);
+    setCurrentAgency(null);
   }, [user]);
 
   const handlePinSubmit = async (digit: string) => {
@@ -70,10 +71,16 @@ const App: React.FC = () => {
     }
   };
 
+  const isAgencyExpired = useMemo(() => {
+    if (!currentAgency?.expires_at) return false;
+    return new Date(currentAgency.expires_at) < new Date();
+  }, [currentAgency]);
+
   const canAccess = useMemo(() => (module: string) => {
     if (user?.role === UserRole.SUPER_ADMIN) return true;
+    if (isAgencyExpired) return false;
     return (currentAgency?.settings?.modules as any)?.[module] !== false;
-  }, [user, currentAgency]);
+  }, [user, currentAgency, isAgencyExpired]);
 
   if (!user) return (
     <div className="min-h-screen bg-primary-600 dark:bg-gray-950 flex items-center justify-center p-6 transition-all">
@@ -152,15 +159,29 @@ const App: React.FC = () => {
         </div>
       </aside>
 
-      <main className="p-6 lg:p-12 max-w-6xl mx-auto w-full animate-in slide-in-from-bottom-2">
-        {activeTab === 'dashboard' && <Dashboard user={user} lang={lang} onNavigate={setActiveTab} />}
-        {activeTab === 'sales' && <SalesTerminal user={user} lang={lang} />}
-        {activeTab === 'history' && <SalesHistory user={user} lang={lang} />}
-        {activeTab === 'tickets' && <TicketManager user={user} lang={lang} />}
-        {activeTab === 'tasks' && <TaskManager user={user} lang={lang} />}
-        {activeTab === 'agencies' && <AgencyManager user={user} lang={lang} />}
-        {activeTab === 'users' && <UserManagement user={user} lang={lang} />}
-        {activeTab === 'settings' && <AgencySettings user={user} lang={lang} />}
+      <main className="p-6 lg:p-12 max-w-6xl mx-auto w-full">
+        {isAgencyExpired && user.role !== UserRole.SUPER_ADMIN ? (
+          <div className="h-[60vh] flex flex-col items-center justify-center text-center space-y-6 animate-in slide-in-from-bottom-8">
+            <div className="w-24 h-24 bg-red-100 dark:bg-red-900/30 text-red-600 rounded-[2.5rem] flex items-center justify-center shadow-lg">
+              <ShieldAlert className="w-12 h-12" />
+            </div>
+            <div className="space-y-2">
+              <h2 className="text-3xl font-black text-gray-900 dark:text-white">Accès Suspendu</h2>
+              <p className="text-gray-500 font-medium max-w-sm mx-auto">L'abonnement de votre agence a expiré le <span className="text-red-600 font-bold">{new Date(currentAgency?.expires_at || '').toLocaleDateString()}</span>. Veuillez contacter votre administrateur pour réactiver vos services.</p>
+            </div>
+          </div>
+        ) : (
+          <div className="animate-in slide-in-from-bottom-2 duration-500">
+            {activeTab === 'dashboard' && <Dashboard user={user} lang={lang} onNavigate={setActiveTab} />}
+            {activeTab === 'sales' && <SalesTerminal user={user} lang={lang} />}
+            {activeTab === 'history' && <SalesHistory user={user} lang={lang} />}
+            {activeTab === 'tickets' && <TicketManager user={user} lang={lang} />}
+            {activeTab === 'tasks' && <TaskManager user={user} lang={lang} />}
+            {activeTab === 'agencies' && <AgencyManager user={user} lang={lang} />}
+            {activeTab === 'users' && <UserManagement user={user} lang={lang} />}
+            {activeTab === 'settings' && <AgencySettings user={user} lang={lang} />}
+          </div>
+        )}
       </main>
 
       <nav className="fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl border-t dark:border-gray-800 flex justify-around p-4 lg:hidden z-50">

@@ -81,7 +81,7 @@ class SupabaseService {
       isSuper ? client.from('sales').select('amount') : client.from('sales').select('amount').eq('agency_id', aid),
       isSuper ? client.from('tickets').select('status') : client.from('tickets').select('status').eq('agency_id', aid),
       isSuper ? client.from('profiles').select('id') : client.from('profiles').select('id').eq('agency_id', aid),
-      isSuper ? client.from('agencies').select('settings') : client.from('agencies').select('settings').eq('id', aid).single()
+      isSuper ? client.from('agencies').select('settings, expires_at') : client.from('agencies').select('settings, expires_at').eq('id', aid).single()
     ]);
 
     let archRev = 0, archCount = 0;
@@ -111,43 +111,26 @@ class SupabaseService {
 
   async importTickets(ts: any[], uid: string, aid: string) {
     if (!this.isConfigured()) return { success: 0, errors: ts.length, skipped: 0 };
-    
-    // 1. Validation de base
     const validTickets = ts.filter(t => t.username && String(t.username).trim().length > 0);
     if (validTickets.length === 0) return { success: 0, errors: 0, skipped: 0 };
-
-    // 2. Vérification des doublons existants en base pour cette agence
-    const { data: existing } = await client.from('tickets')
-      .select('username')
-      .eq('agency_id', aid);
+    const { data: existing } = await client.from('tickets').select('username').eq('agency_id', aid);
     const existingSet = new Set(existing?.map(e => e.username) || []);
-
-    // 3. Préparation des données d'insertion
-    const toInsert = validTickets
-      .filter(t => !existingSet.has(String(t.username).trim()))
-      .map(t => ({
-        username: String(t.username).trim(),
-        password: String(t.password || t.username).trim(),
-        profile: String(t.profile || 'Default').trim(),
-        time_limit: String(t.time_limit || 'N/A').trim(),
-        price: Math.max(0, parseInt(String(t.price)) || 0),
-        status: TicketStatus.UNSOLD,
-        agency_id: aid,
-        created_by: uid,
-        created_at: new Date().toISOString()
-      }));
-
+    const toInsert = validTickets.filter(t => !existingSet.has(String(t.username).trim())).map(t => ({
+      username: String(t.username).trim(),
+      password: String(t.password || t.username).trim(),
+      profile: String(t.profile || 'Default').trim(),
+      time_limit: String(t.time_limit || 'N/A').trim(),
+      price: Math.max(0, parseInt(String(t.price)) || 0),
+      status: TicketStatus.UNSOLD,
+      agency_id: aid,
+      created_by: uid,
+      created_at: new Date().toISOString()
+    }));
     const skipped = validTickets.length - toInsert.length;
-
     if (toInsert.length > 0) {
       const { error } = await client.from('tickets').insert(toInsert);
-      if (error) {
-        console.error("Insert error:", error);
-        return { success: 0, errors: toInsert.length, skipped };
-      }
-      this.log({id: uid, agency_id: aid}, 'TICKET_IMPORT', `Importation réussie de ${toInsert.length} tickets (${skipped} doublons ignorés).`);
+      if (!error) this.log({id: uid, agency_id: aid}, 'TICKET_IMPORT', `Importation: ${toInsert.length} tickets.`);
     }
-
     return { success: toInsert.length, errors: 0, skipped };
   }
 
@@ -165,15 +148,48 @@ class SupabaseService {
     return s as Sale;
   }
 
-  // --- AUTRES MÉTHODES ---
+  // --- AGENCES ---
   async getAgencies() { return (await client.from('agencies').select('*').order('name')).data as Agency[] || []; }
   async getAgency(id: string) { return (await client.from('agencies').select('*').eq('id', id).single()).data as Agency; }
   async updateAgency(id: string, name: string, settings: any, status?: string) {
     const b: any = { name, settings }; if (status) b.status = status;
     await client.from('agencies').update(b).eq('id', id);
   }
-  async addAgency(name: string) { return (await client.from('agencies').insert({ name, status: 'active', settings: { currency: 'GNF', archived_revenue: 0, archived_sales_count: 0, modules: DEFAULT_MODULES } }).select().single()).data as Agency; }
+  async addAgency(name: string) { 
+    const now = new Date();
+    const expiry = new Date(now);
+    expiry.setDate(expiry.getDate() + 3); // 3 jours d'essai par défaut
+    return (await client.from('agencies').insert({ 
+      name, 
+      status: 'active', 
+      activated_at: now.toISOString(),
+      expires_at: expiry.toISOString(),
+      settings: { currency: 'GNF', archived_revenue: 0, archived_sales_count: 0, modules: DEFAULT_MODULES } 
+    }).select().single()).data as Agency; 
+  }
   async deleteAgency(id: string) { await client.from('agencies').delete().eq('id', id); }
+
+  async renewAgency(id: string, days: number, actor: UserProfile) {
+    const agency = await this.getAgency(id);
+    const now = new Date();
+    let currentExpiry = agency.expires_at ? new Date(agency.expires_at) : now;
+    
+    // Si déjà expiré, on repart de maintenant
+    if (currentExpiry < now) currentExpiry = now;
+    
+    const newExpiry = new Date(currentExpiry);
+    newExpiry.setDate(newExpiry.getDate() + days);
+    
+    await client.from('agencies').update({ 
+      expires_at: newExpiry.toISOString(),
+      status: 'active'
+    }).eq('id', id);
+
+    this.log(actor, 'AGENCY_RENEW', `Prolongation de ${days} jours pour l'agence ${agency.name}. Nouvelle échéance: ${newExpiry.toLocaleDateString()}`);
+    return newExpiry.toISOString();
+  }
+
+  // --- UTILISATEURS ---
   async getUsers(aid: string, role: UserRole) {
     let q = client.from('profiles').select('*');
     if (role !== UserRole.SUPER_ADMIN) q = q.eq('agency_id', aid).neq('role', UserRole.SUPER_ADMIN);

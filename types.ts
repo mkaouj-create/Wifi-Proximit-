@@ -104,5 +104,7 @@ export interface Agency {
   status: AgencyStatus;
   owner_id?: string;
   settings?: AgencySettings;
+  activated_at?: string;
+  expires_at?: string;
   created_at: string;
 }
