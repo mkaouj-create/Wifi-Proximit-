@@ -175,29 +175,35 @@ class SupabaseService {
     this.log(actor, 'AGENCY_STATUS_CHANGE', `Statut de l'agence ID ${id} passé à ${status}`);
   }
 
-  async renewAgency(id: string, days: number, actor: UserProfile, price?: number) {
-    if (actor.role !== UserRole.SUPER_ADMIN) throw new Error("Accès refusé");
+  async updateSubscription(id: string, days: number, modules: AgencyModules, actor: UserProfile) {
+    if (actor.role !== UserRole.SUPER_ADMIN) throw new Error("Permission refusée");
     
-    const { data: agency, error: fetchError } = await client.from('agencies').select('*').eq('id', id).single();
-    if (fetchError || !agency) throw new Error("Agence introuvable");
+    const { data: agency } = await client.from('agencies').select('*').eq('id', id).single();
+    if (!agency) throw new Error("Agence non trouvée");
 
     const now = new Date();
     let currentExpiry = agency.expires_at ? new Date(agency.expires_at) : now;
     
-    // Logique de cumul intelligente
-    const startOfNewPeriod = currentExpiry > now ? currentExpiry : now;
-    const newExpiry = new Date(startOfNewPeriod);
+    // Si déjà expiré, on repart de maintenant
+    const startDate = currentExpiry > now ? currentExpiry : now;
+    const newExpiry = new Date(startDate);
     newExpiry.setDate(newExpiry.getDate() + days);
     
-    const { error: updateError } = await client.from('agencies').update({ 
-      activated_at: startOfNewPeriod.toISOString(),
+    const newSettings = {
+      ...(agency.settings || {}),
+      modules: modules
+    };
+
+    const { error } = await client.from('agencies').update({ 
+      activated_at: startDate.toISOString(),
       expires_at: newExpiry.toISOString(),
+      settings: newSettings,
       status: 'active'
     }).eq('id', id);
 
-    if (updateError) throw updateError;
+    if (error) throw error;
 
-    this.log(actor, 'AGENCY_RENEW', `Renouvellement de ${days} jours pour ${agency.name}. (Prix: ${price || 0})`);
+    this.log(actor, 'SUBSCRIPTION_UPDATE', `Mise à jour abonnement pour ${agency.name}: +${days} jours, modules synchronisés.`);
     return newExpiry.toISOString();
   }
 
