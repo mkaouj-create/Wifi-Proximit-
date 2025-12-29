@@ -24,10 +24,14 @@ class SupabaseService {
     if (!this.isConfigured()) return;
     try {
       await client.from('logs').insert({
-        user_id: user.id, user_name: user.display_name || user.email, agency_id: user.agency_id,
-        action, details, created_at: new Date().toISOString()
+        user_id: user.id, 
+        user_name: user.display_name || user.email, 
+        agency_id: user.agency_id,
+        action, 
+        details, 
+        created_at: new Date().toISOString()
       });
-    } catch (e) { console.error("Log error:", e); }
+    } catch (e) { console.error("Audit Log error:", e); }
   }
 
   // --- AUTHENTIFICATION ---
@@ -37,39 +41,52 @@ class SupabaseService {
     if (error || !data) return null;
     const { password: _, pin, ...safeUser } = data;
     if (safeUser.role === UserRole.SUPER_ADMIN) this.cleanupOldData(safeUser as UserProfile).catch(console.error);
-    this.log(safeUser, 'LOGIN', 'Connexion stable établie');
+    this.log(safeUser, 'LOGIN', 'Connexion réussie');
     return safeUser as UserProfile;
   }
 
-  async signOut(u: UserProfile) { await this.log(u, 'LOGOUT', 'Déconnexion session'); }
-  async verifyPin(uid: string, p: string) { return (await client.from('profiles').select('pin').eq('id', uid).single()).data?.pin === p; }
+  async signOut(u: UserProfile) { 
+    await this.log(u, 'LOGOUT', 'Déconnexion manuelle'); 
+  }
 
-  // --- RÉTENTION DES DONNÉES (5 MOIS) ---
+  async verifyPin(uid: string, p: string) { 
+    if (!this.isConfigured()) return false;
+    const { data } = await client.from('profiles').select('pin').eq('id', uid).single();
+    return data?.pin === p; 
+  }
+
+  // --- RÉTENTION DES DONNÉES (AUTO-CLEANUP) ---
   async cleanupOldData(actor: UserProfile): Promise<{ sales: number }> {
     if (!this.isConfigured()) return { sales: 0 };
     const LIMIT_DATE = new Date();
     LIMIT_DATE.setMonth(LIMIT_DATE.getMonth() - 5);
     const dateStr = LIMIT_DATE.toISOString();
 
-    const { data: agencies } = await client.from('agencies').select('*');
+    const { data: agencies } = await client.from('agencies').select('id, settings');
     if (!agencies) return { sales: 0 };
 
     let totalCleaned = 0;
     for (const agency of agencies) {
       const { data: oldSales } = await client.from('sales').select('amount').eq('agency_id', agency.id).lt('sold_at', dateStr);
       if (oldSales && oldSales.length > 0) {
-        const sum = oldSales.reduce((acc, s) => acc + s.amount, 0);
+        const sum = oldSales.reduce((acc, s) => acc + (Number(s.amount) || 0), 0);
         const count = oldSales.length;
-        const s = agency.settings || {};
+        const currentSettings = agency.settings || {};
+        
         await client.from('agencies').update({ 
-          settings: { ...s, archived_revenue: (s.archived_revenue || 0) + sum, archived_sales_count: (s.archived_sales_count || 0) + count, last_cleanup_at: new Date().toISOString() }
+          settings: { 
+            ...currentSettings, 
+            archived_revenue: (Number(currentSettings.archived_revenue) || 0) + sum, 
+            archived_sales_count: (Number(currentSettings.archived_sales_count) || 0) + count, 
+            last_cleanup_at: new Date().toISOString() 
+          }
         }).eq('id', agency.id);
+        
         await client.from('sales').delete().eq('agency_id', agency.id).lt('sold_at', dateStr);
         totalCleaned += count;
       }
       await client.from('tickets').delete().eq('agency_id', agency.id).lt('created_at', dateStr).in('status', [TicketStatus.SOLD, TicketStatus.EXPIRED]);
     }
-    if (totalCleaned > 0) this.log(actor, 'DATA_CLEANUP', `${totalCleaned} enregistrements archivés.`);
     return { sales: totalCleaned };
   }
 
@@ -77,6 +94,7 @@ class SupabaseService {
   async getStats(aid: string, role: UserRole) {
     if (!this.isConfigured()) return { revenue: 0, soldCount: 0, stockCount: 0, agencyCount: 0, userCount: 0, currency: 'GNF' };
     const isSuper = role === UserRole.SUPER_ADMIN;
+    
     const [sales, tickets, profiles, agencies] = await Promise.all([
       isSuper ? client.from('sales').select('amount') : client.from('sales').select('amount').eq('agency_id', aid),
       isSuper ? client.from('tickets').select('status') : client.from('tickets').select('status').eq('agency_id', aid),
@@ -86,14 +104,17 @@ class SupabaseService {
 
     let archRev = 0, archCount = 0;
     if (isSuper) {
-      (agencies.data as any[] || []).forEach(a => { archRev += (a.settings?.archived_revenue || 0); archCount += (a.settings?.archived_sales_count || 0); });
+      (agencies.data as any[] || []).forEach(a => { 
+        archRev += (Number(a.settings?.archived_revenue) || 0); 
+        archCount += (Number(a.settings?.archived_sales_count) || 0); 
+      });
     } else {
-      archRev = (agencies.data as any)?.settings?.archived_revenue || 0;
-      archCount = (agencies.data as any)?.settings?.archived_sales_count || 0;
+      archRev = Number((agencies.data as any)?.settings?.archived_revenue) || 0;
+      archCount = Number((agencies.data as any)?.settings?.archived_sales_count) || 0;
     }
 
     return {
-      revenue: (sales.data || []).reduce((acc, s) => acc + s.amount, 0) + archRev,
+      revenue: (sales.data || []).reduce((acc, s) => acc + (Number(s.amount) || 0), 0) + archRev,
       soldCount: (sales.data || []).length + archCount,
       stockCount: (tickets.data || []).filter(t => t.status === TicketStatus.UNSOLD).length,
       userCount: (profiles.data || []).length,
@@ -106,15 +127,18 @@ class SupabaseService {
   async getTickets(aid: string, role: UserRole) {
     let q = client.from('tickets').select('*').order('created_at', { ascending: false });
     if (role !== UserRole.SUPER_ADMIN) q = q.eq('agency_id', aid);
-    return (await q).data as Ticket[] || [];
+    const { data } = await q;
+    return data as Ticket[] || [];
   }
 
   async importTickets(ts: any[], uid: string, aid: string) {
     if (!this.isConfigured()) return { success: 0, errors: ts.length, skipped: 0 };
     const validTickets = ts.filter(t => t.username && String(t.username).trim().length > 0);
     if (validTickets.length === 0) return { success: 0, errors: 0, skipped: 0 };
+    
     const { data: existing } = await client.from('tickets').select('username').eq('agency_id', aid);
     const existingSet = new Set(existing?.map(e => e.username) || []);
+    
     const toInsert = validTickets.filter(t => !existingSet.has(String(t.username).trim())).map(t => ({
       username: String(t.username).trim(),
       password: String(t.password || t.username).trim(),
@@ -126,17 +150,13 @@ class SupabaseService {
       created_by: uid,
       created_at: new Date().toISOString()
     }));
+
     const skipped = validTickets.length - toInsert.length;
     if (toInsert.length > 0) {
       const { error } = await client.from('tickets').insert(toInsert);
-      if (!error) this.log({id: uid, agency_id: aid}, 'TICKET_IMPORT', `Importation: ${toInsert.length} tickets.`);
+      if (!error) this.log({id: uid, agency_id: aid}, 'TICKET_IMPORT', `Import de ${toInsert.length} tickets.`);
     }
     return { success: toInsert.length, errors: 0, skipped };
-  }
-
-  async updateProfilePrices(aid: string, prof: string, price: number) {
-    const { data } = await client.from('tickets').update({ price }).eq('agency_id', aid).eq('profile', prof).eq('status', TicketStatus.UNSOLD).select();
-    return data?.length || 0;
   }
 
   async sellTicket(tid: string, sid: string, aid: string, phone?: string) {
@@ -144,21 +164,64 @@ class SupabaseService {
     if (!tk) return null;
     const now = new Date().toISOString();
     await client.from('tickets').update({ status: TicketStatus.SOLD, sold_by: sid, sold_at: now }).eq('id', tid);
-    const { data: s } = await client.from('sales').insert({ ticket_id: tid, agency_id: aid, seller_id: sid, amount: tk.price, sold_at: now, customer_phone: phone }).select().single();
+    const { data: s } = await client.from('sales').insert({ 
+      ticket_id: tid, 
+      agency_id: aid, 
+      seller_id: sid, 
+      amount: tk.price, 
+      sold_at: now, 
+      customer_phone: phone 
+    }).select().single();
     return s as Sale;
   }
 
   // --- AGENCES ---
   async getAgencies() { return (await client.from('agencies').select('*').order('name')).data as Agency[] || []; }
   async getAgency(id: string) { return (await client.from('agencies').select('*').eq('id', id).single()).data as Agency; }
-  async updateAgency(id: string, name: string, settings: any, status?: string) {
-    const b: any = { name, settings }; if (status) b.status = status;
-    await client.from('agencies').update(b).eq('id', id);
+  
+  async updateSubscription(id: string, days: number, modules: AgencyModules, actor: UserProfile) {
+    if (actor.role !== UserRole.SUPER_ADMIN) throw new Error("Super-Admin requis pour cette opération.");
+    
+    const { data: agency } = await client.from('agencies').select('*').eq('id', id).single();
+    if (!agency) throw new Error("Agence introuvable.");
+
+    const now = new Date();
+    let currentExpiry = agency.expires_at ? new Date(agency.expires_at) : now;
+    if (isNaN(currentExpiry.getTime())) currentExpiry = now;
+
+    // Calcul cumulé ou nouveau départ
+    const startOfPeriod = currentExpiry > now ? currentExpiry : now;
+    const newExpiry = new Date(startOfPeriod);
+    if (days > 0) newExpiry.setDate(newExpiry.getDate() + days);
+    
+    const updatedSettings = {
+      ...(agency.settings || {}),
+      modules: modules
+    };
+
+    const { error } = await client.from('agencies').update({ 
+      activated_at: (days > 0 ? startOfPeriod : (agency.activated_at || now)).toISOString(),
+      expires_at: newExpiry.toISOString(),
+      settings: updatedSettings,
+      status: 'active'
+    }).eq('id', id);
+
+    if (error) throw error;
+    this.log(actor, 'AGENCY_SUBSCRIPTION', `Mise à jour: +${days}j pour ${agency.name}`);
+    return newExpiry.toISOString();
   }
+
+  async updateAgency(id: string, name: string, settings: any, status?: AgencyStatus) {
+    const body: any = { name, settings };
+    if (status) body.status = status;
+    const { error } = await client.from('agencies').update(body).eq('id', id);
+    if (error) throw error;
+  }
+
   async addAgency(name: string) { 
     const now = new Date();
     const expiry = new Date(now);
-    expiry.setDate(expiry.getDate() + 3); // 3 jours d'essai par défaut
+    expiry.setDate(expiry.getDate() + 3); // 3 jours d'essai
     return (await client.from('agencies').insert({ 
       name, 
       status: 'active', 
@@ -167,76 +230,76 @@ class SupabaseService {
       settings: { currency: 'GNF', archived_revenue: 0, archived_sales_count: 0, modules: DEFAULT_MODULES } 
     }).select().single()).data as Agency; 
   }
+
   async deleteAgency(id: string) { await client.from('agencies').delete().eq('id', id); }
 
   async setAgencyStatus(id: string, status: AgencyStatus, actor: UserProfile) {
     if (actor.role !== UserRole.SUPER_ADMIN) return;
     await client.from('agencies').update({ status }).eq('id', id);
-    this.log(actor, 'AGENCY_STATUS_CHANGE', `Statut de l'agence ID ${id} passé à ${status}`);
-  }
-
-  async updateSubscription(id: string, days: number, modules: AgencyModules, actor: UserProfile) {
-    if (actor.role !== UserRole.SUPER_ADMIN) throw new Error("Permission refusée (Super-Admin requis)");
-    
-    const { data: agency, error: fetchError } = await client.from('agencies').select('*').eq('id', id).single();
-    if (fetchError || !agency) throw new Error("Agence non trouvée en base de données");
-
-    const now = new Date();
-    let currentExpiry = agency.expires_at ? new Date(agency.expires_at) : now;
-    if (isNaN(currentExpiry.getTime())) currentExpiry = now;
-
-    // Calcul de la nouvelle date d'expiration
-    // Si jours > 0, on cumule ou on repart de maintenant si déjà expiré
-    let startDate = agency.activated_at ? new Date(agency.activated_at) : now;
-    let newExpiry = new Date(currentExpiry);
-    
-    if (days > 0) {
-        const baseDate = currentExpiry > now ? currentExpiry : now;
-        startDate = baseDate;
-        newExpiry = new Date(baseDate);
-        newExpiry.setDate(newExpiry.getDate() + days);
-    }
-    
-    const newSettings = {
-      ...(agency.settings || {}),
-      modules: modules
-    };
-
-    const { error: updateError } = await client.from('agencies').update({ 
-      activated_at: startDate.toISOString(),
-      expires_at: newExpiry.toISOString(),
-      settings: newSettings,
-      status: 'active'
-    }).eq('id', id);
-
-    if (updateError) throw new Error(`Erreur Supabase: ${updateError.message}`);
-
-    this.log(actor, 'SUBSCRIPTION_UPDATE', `Mise à jour pour ${agency.name}: +${days}j, modules: ${Object.keys(modules).filter(k => (modules as any)[k]).join(', ')}`);
-    return newExpiry.toISOString();
+    this.log(actor, 'AGENCY_STATUS', `Agence ${id} passée en ${status}`);
   }
 
   // --- UTILISATEURS ---
   async getUsers(aid: string, role: UserRole) {
     let q = client.from('profiles').select('*');
     if (role !== UserRole.SUPER_ADMIN) q = q.eq('agency_id', aid).neq('role', UserRole.SUPER_ADMIN);
-    return (await q).data as UserProfile[] || [];
+    const { data } = await q;
+    return data as UserProfile[] || [];
   }
-  async addUser(u: any) { return (await client.from('profiles').insert({ ...u, display_name: u.email.split('@')[0] }).select().single()).data; }
-  async updateUserRole(uid: string, r: UserRole) { await client.from('profiles').update({ role: r }).eq('id', uid); }
-  async updatePassword(uid: string, p: string, actor: UserProfile) { await client.from('profiles').update({ password: p }).eq('id', uid); return true; }
+
+  async addUser(u: any) { 
+    return (await client.from('profiles').insert({ 
+      ...u, 
+      display_name: u.email.split('@')[0] 
+    }).select().single()).data; 
+  }
+
+  async updateUserRole(uid: string, r: UserRole) { 
+    await client.from('profiles').update({ role: r }).eq('id', uid); 
+  }
+
+  async updatePassword(uid: string, p: string, actor: UserProfile) { 
+    await client.from('profiles').update({ password: p }).eq('id', uid); 
+    this.log(actor, 'PASSWORD_CHANGE', `MDP mis à jour pour utilisateur ${uid}`);
+    return true; 
+  }
+
   async getLogs(aid: string, role: UserRole) {
     let q = client.from('logs').select('*').order('created_at', { ascending: false }).limit(50);
     if (role !== UserRole.SUPER_ADMIN) q = q.eq('agency_id', aid);
-    return (await q).data as ActivityLog[] || [];
+    const { data } = await q;
+    return data as ActivityLog[] || [];
   }
-  async updateTicketPrice(id: string, p: number) { await client.from('tickets').update({ price: p }).eq('id', id); }
+
+  async updateTicketPrice(id: string, p: number) { 
+    await client.from('tickets').update({ price: p }).eq('id', id); 
+  }
+
+  async updateProfilePrices(aid: string, prof: string, price: number) {
+    const { data, error } = await client.from('tickets')
+      .update({ price })
+      .eq('agency_id', aid)
+      .eq('profile', prof)
+      .eq('status', TicketStatus.UNSOLD)
+      .select();
+    return data?.length || 0;
+  }
+
   async deleteTicket(id: string) { await client.from('tickets').delete().eq('id', id); }
+
   async getSales(aid: string, role: UserRole) {
     let q = client.from('sales').select('*, profiles:seller_id(display_name), tickets:ticket_id(username, profile, time_limit)').order('sold_at', {ascending: false});
     if (role !== UserRole.SUPER_ADMIN) q = q.eq('agency_id', aid);
     const { data } = await q;
-    return (data || []).map((s: any) => ({ ...s, seller_name: s.profiles?.display_name, ticket_username: s.tickets?.username, ticket_profile: s.tickets?.profile, ticket_time_limit: s.tickets?.time_limit })) as Sale[];
+    return (data || []).map((s: any) => ({ 
+      ...s, 
+      seller_name: s.profiles?.display_name, 
+      ticket_username: s.tickets?.username, 
+      ticket_profile: s.tickets?.profile, 
+      ticket_time_limit: s.tickets?.time_limit 
+    })) as Sale[];
   }
+
   async cancelSale(id: string) {
     const { data } = await client.from('sales').select('ticket_id').eq('id', id).single();
     if (data?.ticket_id) await client.from('tickets').update({ status: TicketStatus.UNSOLD, sold_by: null, sold_at: null }).eq('id', data.ticket_id);
