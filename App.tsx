@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { LayoutDashboard, ShoppingBag, Database, Users, Lock, Sun, Moon, History, Settings, Building2, ChevronRight, Eye, EyeOff, KeyRound, Loader2, ClipboardList, Power, AlertTriangle, ShieldAlert } from 'lucide-react';
+import { LayoutDashboard, ShoppingBag, Database, Users, Lock, Sun, Moon, History, Settings, Building2, ChevronRight, Eye, EyeOff, KeyRound, Loader2, ClipboardList, Power, AlertTriangle, ShieldAlert, CheckCircle, Info, XCircle, X } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import TicketManager from './components/TicketManager';
 import SalesTerminal from './components/SalesTerminal';
@@ -12,6 +12,17 @@ import TaskManager from './components/TaskManager';
 import { supabase } from './services/supabase';
 import { UserProfile, UserRole, Agency } from './types';
 import { translations, Language } from './i18n';
+
+// --- COMPOSANT TOOLTIP RÉUTILISABLE ---
+export const Tooltip: React.FC<{ text: string, children: React.ReactNode }> = ({ text, children }) => (
+  <div className="group relative flex items-center">
+    {children}
+    <div className="invisible group-hover:visible opacity-0 group-hover:opacity-100 absolute bottom-full left-1/2 -translate-x-1/2 mb-3 px-3 py-2 bg-gray-900 dark:bg-black text-white text-[10px] font-black uppercase tracking-widest rounded-xl shadow-2xl whitespace-nowrap z-[100] transition-all duration-300 pointer-events-none border border-white/10">
+      {text}
+      <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-gray-900 dark:border-t-black"></div>
+    </div>
+  </div>
+);
 
 const App: React.FC = () => {
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -25,6 +36,9 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [lang] = useState<Language>('fr');
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem('theme') === 'dark');
+  
+  // Système de notifications
+  const [notification, setNotification] = useState<{ type: 'success' | 'error' | 'info', message: string } | null>(null);
 
   const t = translations[lang];
 
@@ -32,6 +46,17 @@ const App: React.FC = () => {
     document.documentElement.classList.toggle('dark', darkMode);
     localStorage.setItem('theme', darkMode ? 'dark' : 'light');
   }, [darkMode]);
+
+  useEffect(() => {
+    if (notification) {
+      const timer = setTimeout(() => setNotification(null), 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [notification]);
+
+  const notify = (type: 'success' | 'error' | 'info', message: string) => {
+    setNotification({ type, message });
+  };
 
   useEffect(() => {
     if (user) {
@@ -47,11 +72,15 @@ const App: React.FC = () => {
     if (profile) {
       setUser(profile);
       setPinLocked(true);
-    } else alert(t.loginError);
+      notify('success', `Bienvenue, ${profile.display_name}`);
+    } else notify('error', t.loginError);
   };
 
   const handleLogout = useCallback(async () => {
-    if (user) await supabase.signOut(user);
+    if (user) {
+      await supabase.signOut(user);
+      notify('info', 'Vous avez été déconnecté.');
+    }
     setUser(null);
     setPinLocked(false);
     setCurrentAgency(null);
@@ -64,8 +93,15 @@ const App: React.FC = () => {
       if (newPin.length === 4 && user) {
         setIsLoading(true);
         const ok = await supabase.verifyPin(user.id, newPin);
-        if (ok) { setPinLocked(false); setPin(''); }
-        else { alert(t.pinError); setPin(''); }
+        if (ok) { 
+          setPinLocked(false); 
+          setPin(''); 
+          notify('success', 'Accès autorisé');
+        }
+        else { 
+          notify('error', t.pinError); 
+          setPin(''); 
+        }
         setIsLoading(false);
       }
     }
@@ -130,7 +166,25 @@ const App: React.FC = () => {
   );
 
   return (
-    <div className="min-h-screen pb-24 lg:pb-0 lg:pl-[280px] bg-gray-50 dark:bg-gray-950 transition-colors">
+    <div className="min-h-screen pb-24 lg:pb-0 lg:pl-[280px] bg-gray-50 dark:bg-gray-950 transition-colors relative">
+      
+      {/* SYSTÈME DE NOTIFICATION TOAST */}
+      {notification && (
+        <div className="fixed top-6 right-6 z-[200] animate-in slide-in-from-right duration-500">
+           <div className={`flex items-center gap-4 px-6 py-4 rounded-3xl shadow-2xl border backdrop-blur-xl ${
+             notification.type === 'success' ? 'bg-green-500/90 border-green-400 text-white' :
+             notification.type === 'error' ? 'bg-red-500/90 border-red-400 text-white' :
+             'bg-blue-600/90 border-blue-400 text-white'
+           }`}>
+              {notification.type === 'success' && <CheckCircle size={24} />}
+              {notification.type === 'error' && <XCircle size={24} />}
+              {notification.type === 'info' && <Info size={24} />}
+              <span className="text-sm font-black uppercase tracking-tight">{notification.message}</span>
+              <button onClick={() => setNotification(null)} className="ml-2 hover:opacity-50"><X size={18}/></button>
+           </div>
+        </div>
+      )}
+
       <header className="sticky top-0 z-40 bg-white/80 dark:bg-gray-900/80 backdrop-blur-md border-b dark:border-gray-800 p-4 flex justify-between lg:hidden">
         <button onClick={handleLogout} className="p-3 bg-red-50 dark:bg-red-900/20 text-red-500 rounded-xl"><Power size={20}/></button>
         <div className="flex items-center gap-2"><div className="w-8 h-8 bg-primary-600 rounded-lg flex items-center justify-center text-white font-black">W</div><span className="font-black text-sm dark:text-white uppercase">Wifi Pro</span></div>
@@ -182,13 +236,13 @@ const App: React.FC = () => {
         ) : (
           <div className="animate-in slide-in-from-bottom-2 duration-500">
             {activeTab === 'dashboard' && <Dashboard user={user} lang={lang} onNavigate={setActiveTab} />}
-            {activeTab === 'sales' && <SalesTerminal user={user} lang={lang} />}
-            {activeTab === 'history' && <SalesHistory user={user} lang={lang} />}
-            {activeTab === 'tickets' && <TicketManager user={user} lang={lang} />}
+            {activeTab === 'sales' && <SalesTerminal user={user} lang={lang} notify={notify} />}
+            {activeTab === 'history' && <SalesHistory user={user} lang={lang} notify={notify} />}
+            {activeTab === 'tickets' && <TicketManager user={user} lang={lang} notify={notify} />}
             {activeTab === 'tasks' && <TaskManager user={user} lang={lang} />}
-            {activeTab === 'agencies' && <AgencyManager user={user} lang={lang} />}
-            {activeTab === 'users' && <UserManagement user={user} lang={lang} />}
-            {activeTab === 'settings' && <AgencySettings user={user} lang={lang} />}
+            {activeTab === 'agencies' && <AgencyManager user={user} lang={lang} notify={notify} />}
+            {activeTab === 'users' && <UserManagement user={user} lang={lang} notify={notify} />}
+            {activeTab === 'settings' && <AgencySettings user={user} lang={lang} notify={notify} />}
           </div>
         )}
       </main>

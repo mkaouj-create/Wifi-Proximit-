@@ -176,34 +176,42 @@ class SupabaseService {
   }
 
   async updateSubscription(id: string, days: number, modules: AgencyModules, actor: UserProfile) {
-    if (actor.role !== UserRole.SUPER_ADMIN) throw new Error("Permission refusée");
+    if (actor.role !== UserRole.SUPER_ADMIN) throw new Error("Permission refusée (Super-Admin requis)");
     
-    const { data: agency } = await client.from('agencies').select('*').eq('id', id).single();
-    if (!agency) throw new Error("Agence non trouvée");
+    const { data: agency, error: fetchError } = await client.from('agencies').select('*').eq('id', id).single();
+    if (fetchError || !agency) throw new Error("Agence non trouvée en base de données");
 
     const now = new Date();
     let currentExpiry = agency.expires_at ? new Date(agency.expires_at) : now;
+    if (isNaN(currentExpiry.getTime())) currentExpiry = now;
+
+    // Calcul de la nouvelle date d'expiration
+    // Si jours > 0, on cumule ou on repart de maintenant si déjà expiré
+    let startDate = agency.activated_at ? new Date(agency.activated_at) : now;
+    let newExpiry = new Date(currentExpiry);
     
-    // Si déjà expiré, on repart de maintenant
-    const startDate = currentExpiry > now ? currentExpiry : now;
-    const newExpiry = new Date(startDate);
-    newExpiry.setDate(newExpiry.getDate() + days);
+    if (days > 0) {
+        const baseDate = currentExpiry > now ? currentExpiry : now;
+        startDate = baseDate;
+        newExpiry = new Date(baseDate);
+        newExpiry.setDate(newExpiry.getDate() + days);
+    }
     
     const newSettings = {
       ...(agency.settings || {}),
       modules: modules
     };
 
-    const { error } = await client.from('agencies').update({ 
+    const { error: updateError } = await client.from('agencies').update({ 
       activated_at: startDate.toISOString(),
       expires_at: newExpiry.toISOString(),
       settings: newSettings,
       status: 'active'
     }).eq('id', id);
 
-    if (error) throw error;
+    if (updateError) throw new Error(`Erreur Supabase: ${updateError.message}`);
 
-    this.log(actor, 'SUBSCRIPTION_UPDATE', `Mise à jour abonnement pour ${agency.name}: +${days} jours, modules synchronisés.`);
+    this.log(actor, 'SUBSCRIPTION_UPDATE', `Mise à jour pour ${agency.name}: +${days}j, modules: ${Object.keys(modules).filter(k => (modules as any)[k]).join(', ')}`);
     return newExpiry.toISOString();
   }
 

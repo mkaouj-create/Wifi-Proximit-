@@ -4,10 +4,12 @@ import { Building2, Plus, Edit3, Trash2, X, Search, AlertTriangle, Loader2, Cale
 import { supabase } from '../services/supabase';
 import { Agency, UserProfile, AgencyStatus, AgencyModules } from '../types';
 import { translations, Language } from '../i18n';
+import { Tooltip } from '../App';
 
 interface AgencyManagerProps {
   user: UserProfile;
   lang: Language;
+  notify: (type: 'success' | 'error' | 'info', message: string) => void;
 }
 
 const DURATION_OPTIONS = [
@@ -29,7 +31,7 @@ const MODULE_OPTIONS: { key: keyof AgencyModules; label: string; desc: string }[
   { key: 'tasks', label: 'Tâches & Logs', desc: 'Audit et suivi des tâches' },
 ];
 
-const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang }) => {
+const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang, notify }) => {
   const [agencies, setAgencies] = useState<Agency[]>([]);
   const [showAdd, setShowAdd] = useState(false);
   const [agencyToManage, setAgencyToManage] = useState<Agency | null>(null);
@@ -72,7 +74,10 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang }) => {
   const newExpiryDate = useMemo(() => {
     if (!agencyToManage) return null;
     const now = new Date();
-    const currentExpiry = agencyToManage.expires_at ? new Date(agencyToManage.expires_at) : now;
+    const currentExpiryStr = agencyToManage.expires_at;
+    let currentExpiry = currentExpiryStr ? new Date(currentExpiryStr) : now;
+    if (isNaN(currentExpiry.getTime())) currentExpiry = now;
+
     const start = currentExpiry > now ? currentExpiry : now;
     const end = new Date(start);
     end.setDate(end.getDate() + totalDaysToAdd);
@@ -84,10 +89,11 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang }) => {
     setIsProcessing(true);
     try {
       await supabase.updateSubscription(agencyToManage.id, totalDaysToAdd, selectedModules, user);
+      notify('success', `Abonnement de ${agencyToManage.name} mis à jour.`);
       setAgencyToManage(null);
       await loadAgencies();
-    } catch (e) {
-      alert("Erreur lors de la mise à jour de l'abonnement.");
+    } catch (e: any) {
+      notify('error', e.message || "Erreur lors de la mise à jour");
     } finally {
       setIsProcessing(false);
     }
@@ -109,6 +115,7 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang }) => {
     
     setIsProcessing(true);
     await supabase.setAgencyStatus(agency.id, newStatus, user);
+    notify('info', `Agence ${agency.name} est maintenant ${newStatus === 'active' ? 'active' : 'suspendue'}.`);
     await loadAgencies();
     setIsProcessing(false);
   };
@@ -117,7 +124,10 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang }) => {
     if (agency.status === 'inactive') return { text: 'SUSPENDU', color: 'bg-gray-500 text-white', expired: true };
     if (!agency.expires_at) return { text: 'NON ACTIVÉ', color: 'bg-red-500 text-white', expired: true };
     
-    const diff = new Date(agency.expires_at).getTime() - new Date().getTime();
+    const expiry = new Date(agency.expires_at);
+    if (isNaN(expiry.getTime())) return { text: 'ERREUR DATE', color: 'bg-red-500 text-white', expired: true };
+    
+    const diff = expiry.getTime() - new Date().getTime();
     const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
     
     if (diff <= 0) return { text: 'ACCÈS EXPIRÉ', color: 'bg-red-500 text-white', expired: true };
@@ -175,14 +185,20 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang }) => {
 
               <div className="flex items-center justify-between pt-6 border-t border-gray-100 dark:border-gray-700">
                  <div className="flex gap-2">
-                    <button onClick={() => setAgencyToManage(agency)} className="flex items-center gap-2 px-5 py-3.5 bg-primary-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-primary-700 transition-all active:scale-95 shadow-lg shadow-primary-500/20">
-                      <CreditCard className="w-4 h-4" /> Abonnement
-                    </button>
-                    <button onClick={() => handleToggleStatus(agency)} className={`p-3.5 rounded-xl transition-all active:scale-95 ${agency.status === 'active' ? 'bg-amber-50 text-amber-600 hover:bg-amber-100' : 'bg-green-50 text-green-600 hover:bg-green-100'}`} title={agency.status === 'active' ? 'Suspendre' : 'Réactiver'}>
-                      {agency.status === 'active' ? <PowerOff className="w-4 h-4" /> : <Power className="w-4 h-4" />}
-                    </button>
+                    <Tooltip text="Gérer durée et modules">
+                        <button onClick={() => setAgencyToManage(agency)} className="flex items-center gap-2 px-5 py-3.5 bg-primary-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-primary-700 transition-all active:scale-95 shadow-lg shadow-primary-500/20">
+                          <CreditCard className="w-4 h-4" /> Abonnement
+                        </button>
+                    </Tooltip>
+                    <Tooltip text={agency.status === 'active' ? 'Suspendre l\'accès' : 'Réactiver l\'accès'}>
+                        <button onClick={() => handleToggleStatus(agency)} className={`p-3.5 rounded-xl transition-all active:scale-95 ${agency.status === 'active' ? 'bg-amber-50 text-amber-600 hover:bg-amber-100' : 'bg-green-50 text-green-600 hover:bg-green-100'}`}>
+                          {agency.status === 'active' ? <PowerOff className="w-4 h-4" /> : <Power className="w-4 h-4" />}
+                        </button>
+                    </Tooltip>
                  </div>
-                 <button onClick={() => setAgencyToDelete(agency)} className="p-3.5 bg-red-50 dark:bg-red-900/20 text-red-500 rounded-xl hover:bg-red-100 active:scale-90 transition-all"><Trash2 className="w-4 h-4" /></button>
+                 <Tooltip text="Supprimer définitivement">
+                    <button onClick={() => setAgencyToDelete(agency)} className="p-3.5 bg-red-50 dark:bg-red-900/20 text-red-500 rounded-xl hover:bg-red-100 active:scale-90 transition-all"><Trash2 className="w-4 h-4" /></button>
+                 </Tooltip>
               </div>
             </div>
           );
@@ -209,55 +225,57 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang }) => {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                {/* Section Durées (Cases à cocher cumulables) */}
+                {/* Section Durées */}
                 <div className="space-y-4">
                     <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">1. Choisir Durée (Cumulable)</label>
                     <div className="grid grid-cols-1 gap-2">
                         {DURATION_OPTIONS.map(opt => {
                             const isSelected = selectedDurations.includes(opt.id);
                             return (
-                                <button 
-                                    key={opt.id}
-                                    onClick={() => toggleDuration(opt.id)}
-                                    className={`p-4 rounded-2xl border-2 transition-all flex items-center justify-between font-bold text-sm ${
-                                        isSelected 
-                                        ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20 text-primary-600' 
-                                        : 'border-gray-50 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-500'
-                                    }`}
-                                >
-                                    <div className="flex items-center gap-3">
-                                        {isSelected ? <CheckSquare className="w-5 h-5 text-primary-600" /> : <Square className="w-5 h-5" />}
-                                        <span>{opt.label}</span>
-                                    </div>
-                                    <span className="text-[10px] font-black opacity-50">+{opt.days}j</span>
-                                </button>
+                                <Tooltip key={opt.id} text={`Ajoute exactement ${opt.days} jours au cycle`}>
+                                    <button 
+                                        onClick={() => toggleDuration(opt.id)}
+                                        className={`w-full p-4 rounded-2xl border-2 transition-all flex items-center justify-between font-bold text-sm ${
+                                            isSelected 
+                                            ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20 text-primary-600' 
+                                            : 'border-gray-50 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-500'
+                                        }`}
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            {isSelected ? <CheckSquare className="w-5 h-5 text-primary-600" /> : <Square className="w-5 h-5" />}
+                                            <span>{opt.label}</span>
+                                        </div>
+                                        <span className="text-[10px] font-black opacity-50">+{opt.days}j</span>
+                                    </button>
+                                </Tooltip>
                             );
                         })}
                     </div>
                 </div>
 
-                {/* Section Modules (Interrupteurs/Cases) */}
+                {/* Section Modules */}
                 <div className="space-y-4">
                     <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">2. Modules autorisés</label>
                     <div className="grid grid-cols-1 gap-2">
                         {MODULE_OPTIONS.map(opt => {
                             const isEnabled = selectedModules[opt.key];
                             return (
-                                <button 
-                                    key={opt.key}
-                                    onClick={() => toggleModule(opt.key)}
-                                    className={`p-4 rounded-2xl border transition-all flex items-center justify-between text-left ${
-                                        isEnabled 
-                                        ? 'bg-green-50/50 dark:bg-green-900/10 border-green-200 dark:border-green-800' 
-                                        : 'bg-gray-50 dark:bg-gray-900 border-gray-100 dark:border-gray-700 opacity-60'
-                                    }`}
-                                >
-                                    <div>
-                                        <p className={`text-sm font-black ${isEnabled ? 'text-green-700 dark:text-green-400' : 'text-gray-500'}`}>{opt.label}</p>
-                                        <p className="text-[9px] text-gray-400 font-medium uppercase tracking-tighter">{opt.desc}</p>
-                                    </div>
-                                    {isEnabled ? <ToggleRight className="w-6 h-6 text-green-500" /> : <ToggleLeft className="w-6 h-6 text-gray-300" />}
-                                </button>
+                                <Tooltip key={opt.key} text={opt.desc}>
+                                    <button 
+                                        onClick={() => toggleModule(opt.key)}
+                                        className={`w-full p-4 rounded-2xl border transition-all flex items-center justify-between text-left ${
+                                            isEnabled 
+                                            ? 'bg-green-50/50 dark:bg-green-900/10 border-green-200 dark:border-green-800' 
+                                            : 'bg-gray-50 dark:bg-gray-900 border-gray-100 dark:border-gray-700 opacity-60'
+                                        }`}
+                                    >
+                                        <div>
+                                            <p className={`text-sm font-black ${isEnabled ? 'text-green-700 dark:text-green-400' : 'text-gray-500'}`}>{opt.label}</p>
+                                            <p className="text-[9px] text-gray-400 font-medium uppercase tracking-tighter">{opt.desc}</p>
+                                        </div>
+                                        {isEnabled ? <ToggleRight className="w-6 h-6 text-green-500" /> : <ToggleLeft className="w-6 h-6 text-gray-300" />}
+                                    </button>
+                                </Tooltip>
                             );
                         })}
                     </div>
@@ -272,19 +290,23 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang }) => {
                             <Info size={14} className="text-primary-500" /> Aperçu de l'activation
                         </div>
                         <p className="text-sm font-bold dark:text-white">
-                            Total cumulé : <span className="text-primary-600">{totalDaysToAdd} jours</span>
+                            Ajout : <span className="text-primary-600">{totalDaysToAdd} jours</span>
                         </p>
                         <p className="text-xs text-gray-500">
-                            Nouvelle échéance : <span className="font-black text-gray-900 dark:text-white">{newExpiryDate?.toLocaleDateString() || '---'}</span>
+                            {totalDaysToAdd > 0 ? (
+                                <>Nouvelle échéance : <span className="font-black text-gray-900 dark:text-white">{newExpiryDate?.toLocaleDateString() || '---'}</span></>
+                            ) : (
+                                <span className="italic">Mise à jour des modules uniquement</span>
+                            )}
                         </p>
                     </div>
                     <button 
-                        disabled={isProcessing || totalDaysToAdd === 0}
+                        disabled={isProcessing}
                         onClick={handleUpdateSubscription}
                         className="px-8 py-4 bg-primary-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-primary-500/30 active:scale-95 disabled:opacity-50 transition-all flex items-center gap-3"
                     >
                         {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <ShieldCheck className="w-5 h-5" />}
-                        Mettre à jour & Activer
+                        Mettre à jour
                     </button>
                 </div>
             </div>
@@ -302,7 +324,7 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang }) => {
             <h3 className="text-2xl font-black mb-4 dark:text-white">Supprimer Agence</h3>
             <p className="text-sm text-gray-500 dark:text-gray-400 mb-8 leading-relaxed">Cette action supprimera toutes les données liées à <span className="font-black text-red-500">"{agencyToDelete.name}"</span>.</p>
             <div className="flex flex-col gap-3">
-              <button onClick={async () => { await supabase.deleteAgency(agencyToDelete.id); setAgencyToDelete(null); loadAgencies(); }} className="w-full py-5 bg-red-500 text-white rounded-2xl font-black text-xs uppercase shadow-xl shadow-red-500/30 active:scale-95 transition-all">Confirmer Suppression</button>
+              <button onClick={async () => { await supabase.deleteAgency(agencyToDelete.id); notify('info', 'Agence supprimée'); setAgencyToDelete(null); loadAgencies(); }} className="w-full py-5 bg-red-500 text-white rounded-2xl font-black text-xs uppercase shadow-xl shadow-red-500/30 active:scale-95 transition-all">Confirmer Suppression</button>
               <button onClick={() => setAgencyToDelete(null)} className="w-full py-5 bg-gray-100 dark:bg-gray-700 text-gray-400 rounded-2xl font-black text-xs uppercase active:scale-95 transition-all">Annuler</button>
             </div>
           </div>
@@ -317,7 +339,7 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang }) => {
               <h3 className="text-2xl font-black dark:text-white">Nouvelle Agence</h3>
               <button onClick={() => setShowAdd(false)} className="p-2.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-2xl dark:text-white"><X className="w-6 h-6" /></button>
             </div>
-            <form onSubmit={async (e) => { e.preventDefault(); if(!newAgencyName) return; await supabase.addAgency(newAgencyName); setNewAgencyName(''); setShowAdd(false); loadAgencies(); }} className="space-y-6">
+            <form onSubmit={async (e) => { e.preventDefault(); if(!newAgencyName) return; await supabase.addAgency(newAgencyName); notify('success', `Agence ${newAgencyName} créée.`); setNewAgencyName(''); setShowAdd(false); loadAgencies(); }} className="space-y-6">
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-2">Nom commercial</label>
                 <input type="text" className="w-full px-7 py-5 bg-gray-50 dark:bg-gray-900 border-none rounded-2xl focus:ring-4 focus:ring-primary-500/10 font-bold dark:text-white" value={newAgencyName} onChange={(e) => setNewAgencyName(e.target.value)} required placeholder="Ex: Cyber Pro Conakry" />

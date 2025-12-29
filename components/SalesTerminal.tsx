@@ -1,16 +1,18 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { ShoppingCart, Phone, CheckCircle2, Share2, AlertCircle, Sparkles, Loader2, Copy } from 'lucide-react';
+import { ShoppingCart, Phone, CheckCircle2, Share2, AlertCircle, Sparkles, Loader2, Copy, Info } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import { Ticket, UserProfile, TicketStatus, Agency } from '../types';
 import { translations, Language } from '../i18n';
+import { Tooltip } from '../App';
 
 interface SalesTerminalProps {
   user: UserProfile;
   lang: Language;
+  notify: (type: 'success' | 'error' | 'info', message: string) => void;
 }
 
-const SalesTerminal: React.FC<SalesTerminalProps> = ({ user, lang }) => {
+const SalesTerminal: React.FC<SalesTerminalProps> = ({ user, lang, notify }) => {
   const [availableTickets, setAvailableTickets] = useState<Ticket[]>([]);
   const [agency, setAgency] = useState<Agency | null>(null);
   const [selectedProfile, setSelectedProfile] = useState<string | null>(null);
@@ -42,7 +44,6 @@ const SalesTerminal: React.FC<SalesTerminalProps> = ({ user, lang }) => {
 
   const currency = agency?.settings?.currency || 'GNF';
 
-  // Génération centralisée du message avec Code, Validité, Prix
   const getReceiptMessage = (ticket: Ticket) => {
     const header = agency?.settings?.whatsapp_receipt_header || `*${t.appName}*`;
     return `${header}\n\n*CODE WIFI*\nCode: *${ticket.username}*\nValidité: *${ticket.time_limit}*\nPrix: *${ticket.price.toLocaleString()} ${currency}*\n\nMerci de votre confiance !`;
@@ -53,9 +54,9 @@ const SalesTerminal: React.FC<SalesTerminalProps> = ({ user, lang }) => {
     const text = getReceiptMessage(soldTicketInfo);
     try {
       await navigator.clipboard.writeText(text);
-      alert(lang === 'fr' ? 'Copié !' : 'Copied!');
+      notify('success', 'Code copié avec succès');
     } catch (err) {
-      console.error('Failed to copy', err);
+      notify('error', 'Échec de la copie');
     }
   };
 
@@ -97,10 +98,12 @@ const SalesTerminal: React.FC<SalesTerminalProps> = ({ user, lang }) => {
       setSoldTicketInfo(ticketToSell);
       setShowReceipt(true);
       setIsSelling(false);
+      notify('success', 'Vente effectuée !');
       const updatedTickets = await supabase.getTickets(user.agency_id, user.role);
       setAvailableTickets(updatedTickets.filter(t => t.status === TicketStatus.UNSOLD));
     } else {
       setIsSelling(false);
+      notify('error', 'Le ticket n\'est plus disponible.');
     }
   };
 
@@ -114,7 +117,7 @@ const SalesTerminal: React.FC<SalesTerminalProps> = ({ user, lang }) => {
       } catch (err) { console.error(err); }
     } else {
       await navigator.clipboard.writeText(text);
-      alert(lang === 'fr' ? 'Reçu copié !' : 'Receipt copied!');
+      notify('info', 'Lien de partage copié.');
     }
   };
 
@@ -148,11 +151,10 @@ const SalesTerminal: React.FC<SalesTerminalProps> = ({ user, lang }) => {
             </div>
             
             <div className="bg-gray-50 dark:bg-gray-900/50 p-6 rounded-[2.5rem] space-y-6 border border-gray-100 dark:border-gray-800 relative animate-in slide-in-from-bottom-4 duration-500 delay-200">
-               <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-white dark:bg-gray-800 px-4 py-1 rounded-full border border-gray-100 dark:border-gray-700 text-[9px] font-black text-gray-400 uppercase tracking-tighter shadow-sm">
-                 Ticket Virtuel
+               <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-white dark:bg-gray-800 px-4 py-1 rounded-full border border-gray-100 dark:border-gray-700 text-[9px] font-black text-gray-400 uppercase tracking-tighter shadow-sm flex items-center gap-1">
+                 <Info size={10} className="text-primary-500" /> Ticket Virtuel
                </div>
                
-               {/* VRAI QR Code Généré */}
                <div className="bg-white p-4 rounded-3xl shadow-sm inline-block">
                   <img 
                     src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${soldTicketInfo.username}&bgcolor=ffffff`}
@@ -172,12 +174,14 @@ const SalesTerminal: React.FC<SalesTerminalProps> = ({ user, lang }) => {
 
             <div className="animate-in slide-in-from-bottom-4 duration-500 delay-300 px-2">
                 <div className="relative group">
-                    <div className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 group-focus-within:text-green-500 transition-colors">
-                        <Phone className="w-full h-full" />
-                    </div>
+                    <Tooltip text="Saisir 624... sans indicatif">
+                        <div className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 group-focus-within:text-green-500 transition-colors">
+                            <Phone className="w-full h-full" />
+                        </div>
+                    </Tooltip>
                     <input 
                         type="tel" 
-                        placeholder={lang === 'fr' ? "Numéro WhatsApp..." : "WhatsApp Number..."}
+                        placeholder={lang === 'fr' ? "WhatsApp (Ex: 624...)" : "WhatsApp (Ex: 624...)"}
                         className="w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 focus:border-green-500/50 focus:ring-4 focus:ring-green-500/10 rounded-2xl pl-14 pr-4 py-4 transition-all outline-none font-bold text-center text-gray-900 dark:text-white placeholder:text-gray-400 text-sm shadow-sm"
                         value={customerPhone}
                         onChange={(e) => setCustomerPhone(e.target.value)}
@@ -186,27 +190,33 @@ const SalesTerminal: React.FC<SalesTerminalProps> = ({ user, lang }) => {
             </div>
 
             <div className="grid grid-cols-3 gap-2 animate-in slide-in-from-bottom-4 duration-500 delay-400">
-              <button 
-                onClick={handleShare}
-                className="flex flex-col items-center justify-center gap-1.5 py-4 bg-gray-100 dark:bg-gray-700 rounded-2xl font-black text-[10px] transition-transform active:scale-95 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
-              >
-                <Share2 className="w-5 h-5" />
-                {t.share}
-              </button>
-              <button 
-                onClick={handleCopy}
-                className="flex flex-col items-center justify-center gap-1.5 py-4 bg-blue-50 dark:bg-blue-900/20 rounded-2xl font-black text-[10px] transition-transform active:scale-95 text-blue-600 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/30"
-              >
-                <Copy className="w-5 h-5" />
-                {t.copyCode}
-              </button>
-              <button 
-                onClick={() => sendWhatsApp(soldTicketInfo, customerPhone)}
-                className="flex flex-col items-center justify-center gap-1.5 py-4 bg-green-500 text-white rounded-2xl font-black text-[10px] transition-transform active:scale-95 shadow-lg shadow-green-500/20 hover:bg-green-600"
-              >
-                <Phone className="w-5 h-5" />
-                {t.whatsapp}
-              </button>
+              <Tooltip text="Partager via mobile">
+                <button 
+                    onClick={handleShare}
+                    className="w-full flex flex-col items-center justify-center gap-1.5 py-4 bg-gray-100 dark:bg-gray-700 rounded-2xl font-black text-[10px] transition-transform active:scale-95 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
+                >
+                    <Share2 className="w-5 h-5" />
+                    {t.share}
+                </button>
+              </Tooltip>
+              <Tooltip text="Copier le reçu">
+                <button 
+                    onClick={handleCopy}
+                    className="w-full flex flex-col items-center justify-center gap-1.5 py-4 bg-blue-50 dark:bg-blue-900/20 rounded-2xl font-black text-[10px] transition-transform active:scale-95 text-blue-600 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/30"
+                >
+                    <Copy className="w-5 h-5" />
+                    {t.copyCode}
+                </button>
+              </Tooltip>
+              <Tooltip text="Envoyer direct WhatsApp">
+                <button 
+                    onClick={() => sendWhatsApp(soldTicketInfo, customerPhone)}
+                    className="w-full flex flex-col items-center justify-center gap-1.5 py-4 bg-green-500 text-white rounded-2xl font-black text-[10px] transition-transform active:scale-95 shadow-lg shadow-green-500/20 hover:bg-green-600"
+                >
+                    <Phone className="w-5 h-5" />
+                    {t.whatsapp}
+                </button>
+              </Tooltip>
             </div>
           </div>
           
@@ -238,7 +248,13 @@ const SalesTerminal: React.FC<SalesTerminalProps> = ({ user, lang }) => {
 
       <div className="space-y-8">
         <section>
-          <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-4 block ml-1">{t.selectProfile}</label>
+          <div className="flex items-center gap-2 mb-4 ml-1">
+            <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">{t.selectProfile}</label>
+            <Tooltip text="Seuls les forfaits ayant du stock sont affichés.">
+                <Info size={12} className="text-gray-300" />
+            </Tooltip>
+          </div>
+          
           {dynamicProfiles.length > 0 ? (
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
               {dynamicProfiles.map(profile => {
@@ -289,7 +305,12 @@ const SalesTerminal: React.FC<SalesTerminalProps> = ({ user, lang }) => {
           <div className="animate-in slide-in-from-bottom-8 duration-500">
             <div className="bg-white dark:bg-gray-800 p-10 rounded-[3rem] shadow-xl shadow-gray-200/40 dark:shadow-none space-y-8 border border-gray-50 dark:border-gray-700">
               <div className="space-y-3">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-2">{t.customerWhatsapp}</label>
+                <div className="flex items-center gap-2 ml-2">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">{t.customerWhatsapp}</label>
+                    <Tooltip text="Indispensable pour l'envoi automatique direct">
+                        <Info size={12} className="text-gray-300" />
+                    </Tooltip>
+                </div>
                 <div className="relative group">
                   <div className="absolute left-6 top-1/2 -translate-y-1/2 w-6 h-6 text-gray-400 group-focus-within:text-primary-500 transition-colors">
                     <Phone className="w-full h-full" />
