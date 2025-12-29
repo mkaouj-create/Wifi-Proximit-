@@ -50,39 +50,42 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language }> = ({ user, 
       const text = ev.target?.result as string;
       const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
       
-      if (lines.length < 2) {
-          alert("Fichier vide ou invalide.");
+      if (lines.length < 1) {
+          alert("Le fichier est vide.");
           setLoading(false);
           return;
       }
 
-      // 1. Analyse des en-têtes (Headers)
+      // 1. Analyse dynamique des en-têtes (Headers)
       const headers = lines[0].toLowerCase().split(/[;,]/).map(h => h.trim().replace(/^["']|["']$/g, ''));
-      const dataLines = lines.slice(1);
-
-      // Mapping d'index dynamique basé sur les mots-clés Mikhmon standards
+      
       const idx = {
-        user: headers.findIndex(h => h.includes('user') || h.includes('name') || h === 'code' || h === 'login' || h === 'identifiant'),
+        user: headers.findIndex(h => h.includes('user') || h === 'login' || h === 'identifiant' || h === 'code'),
         pass: headers.findIndex(h => h.includes('pass') || h === 'pwd' || h === 'mot de passe'),
         prof: headers.findIndex(h => h.includes('prof') || h === 'forfait' || h === 'plan'),
-        limit: headers.findIndex(h => h.includes('limit') || h.includes('time') || h.includes('valid') || h === 'uptime'),
+        limit: headers.findIndex(h => h.includes('limit') || h.includes('time') || h === 'validité' || h === 'uptime'),
         price: headers.findIndex(h => h.includes('price') || h.includes('prix') || h === 'amount' || h === 'tarif')
       };
 
-      // 2. Traitement des lignes de données
+      // Si les en-têtes ne sont pas clairs, on utilise l'ordre standard Mikhmon
+      const isMikhmonStandard = idx.user !== -1 && idx.prof !== -1;
+      const dataLines = isMikhmonStandard ? lines.slice(1) : lines;
+
       const rows = dataLines.map(line => {
         const p = line.split(/[;,]/).map(v => v.replace(/^["']|["']$/g, '').trim());
+        
+        // Mapping intelligent basé sur les index trouvés ou défaut
         return { 
-            username: idx.user !== -1 ? p[idx.user] : p[0], 
-            password: idx.pass !== -1 ? p[idx.pass] : p[1] || '', 
-            profile: idx.prof !== -1 ? p[idx.prof] : p[2] || 'Default', 
-            time_limit: idx.limit !== -1 ? p[idx.limit] : p[3] || 'N/A', 
-            price: idx.price !== -1 ? (parseInt(p[idx.price]) || 0) : (parseInt(p[4]) || 0) 
+            username: isMikhmonStandard ? p[idx.user] : p[0], 
+            password: idx.pass !== -1 ? p[idx.pass] : (isMikhmonStandard ? p[idx.pass] : p[1] || p[0]), 
+            profile: idx.prof !== -1 ? p[idx.prof] : (p[2] || 'Default'), 
+            time_limit: idx.limit !== -1 ? p[idx.limit] : (p[3] || 'N/A'), 
+            price: idx.price !== -1 ? (parseInt(p[idx.price]) || 0) : 0 // Mikhmon n'exporte pas souvent le prix
         };
       }).filter(r => r.username && r.username.length > 0);
 
       if (rows.length === 0) {
-          alert("Aucune donnée valide trouvée dans le fichier.");
+          alert("Aucune donnée valide n'a pu être extraite.");
           setLoading(false);
           return;
       }
@@ -95,17 +98,37 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language }> = ({ user, 
       loadData();
     };
     reader.readAsText(file);
+    // Reset de l'input pour permettre le même fichier
+    e.target.value = '';
   };
 
+  // Fix: Added missing handleBulkUpdate function to handle batch price updates for a profile
   const handleBulkUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!bulkProfile || !newPrice) return;
+
     setLoading(true);
-    const count = await supabase.updateProfilePrices(user.agency_id, bulkProfile, parseInt(newPrice));
-    alert(`${count} tickets "${bulkProfile}" mis à jour.`);
+    // If Super Admin, update based on selected agency or user's agency
+    const aid = (isSuper && selectedAgency !== 'ALL') ? selectedAgency : user.agency_id;
+    
+    const count = await supabase.updateProfilePrices(aid, bulkProfile, parseInt(newPrice));
+    
+    alert(`${count} tickets mis à jour.`);
     setShowBulkPrice(false);
     setNewPrice('');
+    setBulkProfile('');
     loadData();
+  };
+
+  const getStatusBadge = (status: TicketStatus) => {
+    const config = {
+      [TicketStatus.UNSOLD]: { color: 'bg-green-100 text-green-700', label: t.unsold },
+      [TicketStatus.SOLD]: { color: 'bg-blue-100 text-blue-700', label: t.sold },
+      [TicketStatus.ACTIVE]: { color: 'bg-amber-100 text-amber-700', label: t.active },
+      [TicketStatus.EXPIRED]: { color: 'bg-red-100 text-red-700', label: t.expired },
+    };
+    const c = config[status] || config[TicketStatus.UNSOLD];
+    return <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-tighter ${c.color}`}>{c.label}</span>;
   };
 
   const filtered = tickets.filter(tk => {
@@ -149,9 +172,11 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language }> = ({ user, 
             </select>
           )}
           <select className="bg-transparent text-[10px] font-black uppercase tracking-widest outline-none dark:text-white cursor-pointer" value={filterStatus} onChange={e => setFilterStatus(e.target.value as any)}>
-            <option value="ALL">Tous Statuts</option>
+            <option value="ALL">Tous les statuts</option>
             <option value="UNSOLD">En Stock</option>
             <option value="SOLD">Vendu</option>
+            <option value="ACTIVE">Actif</option>
+            <option value="EXPIRED">Expiré</option>
           </select>
         </div>
       </div>
@@ -160,7 +185,7 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language }> = ({ user, 
         {loading ? (
           <div className="p-20 flex flex-col items-center gap-4">
             <Loader2 className="animate-spin text-primary-600" size={40}/>
-            <p className="text-[10px] font-black text-gray-400 uppercase">Chargement en cours...</p>
+            <p className="text-[10px] font-black text-gray-400 uppercase">Synchronisation...</p>
           </div>
         ) : (
           <div className="overflow-x-auto no-scrollbar">
@@ -174,11 +199,7 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language }> = ({ user, 
                     <td className="px-6 py-4"><span className="font-black dark:text-white group-hover:text-primary-600 transition-colors">{tk.username}</span><br/><span className="text-[10px] text-gray-400 font-bold">{tk.time_limit}</span></td>
                     <td className="px-6 py-4"><span className="px-3 py-1 bg-gray-100 dark:bg-gray-700 rounded-lg font-bold text-[10px]">{tk.profile}</span></td>
                     <td className="px-6 py-4 text-right font-black dark:text-white">{tk.price.toLocaleString()}</td>
-                    <td className="px-6 py-4 text-center">
-                        <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-tighter ${tk.status === TicketStatus.UNSOLD ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
-                            {tk.status === TicketStatus.UNSOLD ? 'STOCK' : 'VENDU'}
-                        </span>
-                    </td>
+                    <td className="px-6 py-4 text-center">{getStatusBadge(tk.status)}</td>
                     <td className="px-6 py-4 text-right">
                       {tk.status === TicketStatus.UNSOLD && user.role !== UserRole.SELLER && (
                         <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -199,11 +220,11 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language }> = ({ user, 
       {showImport && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in">
           <div className="bg-white dark:bg-gray-800 w-full max-w-md rounded-[2.5rem] p-10 shadow-2xl animate-in zoom-in">
-            <h3 className="text-xl font-black mb-6 dark:text-white">Importer des tickets</h3>
+            <h3 className="text-xl font-black mb-6 dark:text-white">Importer des tickets Mikhmon</h3>
             <div className="bg-gray-50 dark:bg-gray-900 p-4 rounded-2xl mb-6 flex gap-3 items-start border border-gray-100 dark:border-gray-800">
                 <AlertTriangle size={18} className="text-amber-500 shrink-0" />
                 <p className="text-[10px] text-gray-400 font-bold uppercase leading-relaxed">
-                    Importation Mikhmon : Le système détecte automatiquement les colonnes 'username', 'profile', 'price' et 'limit'.<br/>Les doublons existants dans votre agence seront ignorés.
+                    Le système détecte automatiquement les colonnes Username, Profile et Time Limit.<br/>Les doublons par username seront automatiquement ignorés.
                 </p>
             </div>
             {isSuper && (
@@ -211,7 +232,7 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language }> = ({ user, 
               <select id="importAid" className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl outline-none font-bold mt-1 dark:text-white">{agencies.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
             )}
             <input type="file" accept=".csv" onChange={handleImport} className="w-full p-8 border-4 border-dashed rounded-[2rem] text-center font-bold text-gray-400 cursor-pointer hover:border-primary-500 transition-colors" />
-            <button onClick={() => setShowImport(false)} className="w-full mt-6 py-4 bg-gray-100 dark:bg-gray-700 rounded-2xl font-black uppercase tracking-widest text-[10px]">Annuler</button>
+            <button onClick={() => setShowImport(false)} className="w-full mt-6 py-4 bg-gray-100 dark:bg-gray-700 rounded-2xl font-black uppercase tracking-widest text-[10px]">Annuler l'import</button>
           </div>
         </div>
       )}
@@ -226,10 +247,10 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language }> = ({ user, 
                     <option value="">Sélectionner un Forfait...</option>
                     {uniqueProfiles.map(p => <option key={p} value={p}>{p}</option>)}
                 </select>
-                <input type="number" placeholder="Nouveau prix (ex: 500)" className="w-full p-5 bg-gray-50 dark:bg-gray-900 rounded-2xl outline-none font-black text-xl dark:text-white" value={newPrice} onChange={e => setNewPrice(e.target.value)} required />
+                <input type="number" placeholder="Nouveau prix (ex: 5000)" className="w-full p-5 bg-gray-50 dark:bg-gray-900 rounded-2xl outline-none font-black text-xl dark:text-white" value={newPrice} onChange={e => setNewPrice(e.target.value)} required />
                 <div className="flex gap-4 mt-6">
                     <button type="button" onClick={() => setShowBulkPrice(false)} className="flex-1 py-4 font-black uppercase text-[10px]">Annuler</button>
-                    <button type="submit" className="flex-1 py-4 bg-amber-500 text-white rounded-2xl font-black uppercase text-[10px] shadow-lg">Modifier tout</button>
+                    <button type="submit" className="flex-1 py-4 bg-amber-500 text-white rounded-2xl font-black uppercase text-[10px] shadow-lg">Mettre à jour tout</button>
                 </div>
             </form>
           </div>
@@ -245,7 +266,7 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language }> = ({ user, 
             <input type="number" className="w-full p-5 bg-gray-50 dark:bg-gray-900 rounded-2xl outline-none font-black text-2xl dark:text-white" value={newPrice} onChange={e => setNewPrice(e.target.value)} autoFocus />
             <div className="flex gap-4 mt-8">
               <button onClick={() => setEditingTicket(null)} className="flex-1 py-4 font-black uppercase text-[10px]">Annuler</button>
-              <button onClick={async () => { await supabase.updateTicketPrice(editingTicket.id, parseInt(newPrice)); setEditingTicket(null); loadData(); }} className="flex-1 py-4 bg-primary-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-lg">Mettre à jour</button>
+              <button onClick={async () => { await supabase.updateTicketPrice(editingTicket.id, parseInt(newPrice)); setEditingTicket(null); loadData(); }} className="flex-1 py-4 bg-primary-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-lg">Enregistrer</button>
             </div>
           </div>
         </div>

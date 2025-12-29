@@ -112,40 +112,43 @@ class SupabaseService {
   async importTickets(ts: any[], uid: string, aid: string) {
     if (!this.isConfigured()) return { success: 0, errors: ts.length, skipped: 0 };
     
-    // 1. Récupérer les identifiants existants pour éviter les doublons
+    // 1. Validation de base
+    const validTickets = ts.filter(t => t.username && String(t.username).trim().length > 0);
+    if (validTickets.length === 0) return { success: 0, errors: 0, skipped: 0 };
+
+    // 2. Vérification des doublons existants en base pour cette agence
     const { data: existing } = await client.from('tickets')
       .select('username')
       .eq('agency_id', aid);
     const existingSet = new Set(existing?.map(e => e.username) || []);
 
-    // 2. Mapper et filtrer les nouveaux tickets
-    const toInsert = ts.map(t => ({
-      username: String(t.username || '').trim(), 
-      password: String(t.password || '').trim(), 
-      profile: String(t.profile || 'Default').trim(),
-      time_limit: String(t.time_limit || 'N/A').trim(), 
-      price: Math.max(0, parseInt(String(t.price)) || 0),
-      status: TicketStatus.UNSOLD, 
-      agency_id: aid, 
-      created_by: uid, 
-      created_at: new Date().toISOString()
-    })).filter(t => t.username.length > 0 && !existingSet.has(t.username));
+    // 3. Préparation des données d'insertion
+    const toInsert = validTickets
+      .filter(t => !existingSet.has(String(t.username).trim()))
+      .map(t => ({
+        username: String(t.username).trim(),
+        password: String(t.password || t.username).trim(),
+        profile: String(t.profile || 'Default').trim(),
+        time_limit: String(t.time_limit || 'N/A').trim(),
+        price: Math.max(0, parseInt(String(t.price)) || 0),
+        status: TicketStatus.UNSOLD,
+        agency_id: aid,
+        created_by: uid,
+        created_at: new Date().toISOString()
+      }));
 
-    const skipped = ts.length - toInsert.length;
+    const skipped = validTickets.length - toInsert.length;
 
-    if (toInsert.length === 0) {
-        return { success: 0, errors: 0, skipped };
+    if (toInsert.length > 0) {
+      const { error } = await client.from('tickets').insert(toInsert);
+      if (error) {
+        console.error("Insert error:", error);
+        return { success: 0, errors: toInsert.length, skipped };
+      }
+      this.log({id: uid, agency_id: aid}, 'TICKET_IMPORT', `Importation réussie de ${toInsert.length} tickets (${skipped} doublons ignorés).`);
     }
 
-    // 3. Insertion par lots
-    const { error } = await client.from('tickets').insert(toInsert);
-    
-    if (!error) {
-        this.log({id: uid, agency_id: aid}, 'TICKET_IMPORT', `Importation: ${toInsert.length} nouveaux tickets (${skipped} doublons ignorés)`);
-        return { success: toInsert.length, errors: 0, skipped };
-    }
-
-    return { success: 0, errors: toInsert.length, skipped: 0 };
+    return { success: toInsert.length, errors: 0, skipped };
   }
 
   async updateProfilePrices(aid: string, prof: string, price: number) {

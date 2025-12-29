@@ -29,6 +29,7 @@ export const translations = {
     allStatus: "Tous les statuts",
     unsold: "En Stock",
     sold: "Vendu",
+    active: "Actif",
     expired: "Expiré",
     username: "Code / Identifiant",
     profile: "Forfait / Profil",
@@ -78,7 +79,6 @@ export const translations = {
     addAgency: "Ajouter Agence",
     editAgency: "Modifier Agence",
     deleteAgency: "Supprimer Agence",
-    active: "Actif",
     inactive: "Inactif",
     confirmDelete: "Voulez-vous vraiment supprimer cette agence ?",
     dangerZone: "Zone de Danger",
@@ -149,7 +149,6 @@ export const translations = {
     confirmSaleDesc: "Vous êtes sur le point de vendre un ticket",
     confirmToggleAgency: "Voulez-vous changer le statut de cette agence ?",
     confirmDeleteTask: "Supprimer cette tâche définitivement ?",
-    // Rétention
     dataRetention: "Rétention des données",
     retentionStatus: "État de la base de données",
     cleanupDesc: "Les tickets et ventes de plus de 5 mois sont archivés pour optimiser les performances.",
@@ -187,6 +186,7 @@ export const translations = {
     allStatus: "All Status",
     unsold: "In Stock",
     sold: "Sold",
+    active: "Active",
     expired: "Expired",
     username: "Code / Username",
     profile: "Plan / Profile",
@@ -236,7 +236,6 @@ export const translations = {
     addAgency: "Add Agency",
     editAgency: "Edit Agency",
     deleteAgency: "Delete Agency",
-    active: "Active",
     inactive: "Inactive",
     confirmDelete: "Are you sure you want to delete this agency?",
     dangerZone: "Danger Zone",
@@ -307,7 +306,6 @@ export const translations = {
     confirmSaleDesc: "You are about to sell a ticket",
     confirmToggleAgency: "Do you want to change the status of this agency?",
     confirmDeleteTask: "Delete this task permanently?",
-    // Retention
     dataRetention: "Data Retention",
     retentionStatus: "Database Status",
     cleanupDesc: "Tickets and sales older than 5 months are archived to optimize performance.",
@@ -317,5 +315,4 @@ export const translations = {
     dataOptimized: "Database optimized!"
   }
 };
-
 export type Language = 'fr' | 'en';
