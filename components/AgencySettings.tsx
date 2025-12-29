@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Building2, Save, CheckCircle, Smartphone, MessageSquare, AlertTriangle } from 'lucide-react';
+import { Building2, Save, CheckCircle, Smartphone, MessageSquare, AlertTriangle, ShieldCheck, Eye, EyeOff } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import { Agency, UserProfile } from '../types';
 import { translations, Language } from '../i18n';
@@ -19,6 +19,12 @@ const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang }) => {
   const [saved, setSaved] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   
+  // États Changement MDP
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPwd, setShowPwd] = useState(false);
+  const [pwdLoading, setPwdLoading] = useState(false);
+  
   const t = translations[lang];
 
   useEffect(() => {
@@ -32,7 +38,6 @@ const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang }) => {
       setName(data.name);
       setCurrency(data.settings?.currency || 'GNF');
       setReceiptHeader(data.settings?.whatsapp_receipt_header || '');
-      // Typage maintenant correct, pas besoin de 'as any'
       setContactPhone(data.settings?.contact_phone || '');
     }
   };
@@ -53,8 +58,32 @@ const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang }) => {
     setTimeout(() => setSaved(false), 3000);
   };
 
+  const handlePasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPassword.length < 6) {
+        alert(t.passwordTooShort);
+        return;
+    }
+    if (newPassword !== confirmPassword) {
+        alert(t.passwordMismatch);
+        return;
+    }
+
+    setPwdLoading(true);
+    const success = await supabase.updatePassword(user.id, newPassword, user);
+    setPwdLoading(false);
+
+    if (success) {
+        alert(t.passwordChanged);
+        setNewPassword('');
+        setConfirmPassword('');
+    } else {
+        alert("Une erreur est survenue lors de la mise à jour.");
+    }
+  };
+
   return (
-    <div className="max-w-3xl mx-auto space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="max-w-3xl mx-auto space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-500 mb-20">
       <div className="text-center space-y-3">
         <div className="w-24 h-24 bg-primary-100 dark:bg-primary-900/30 text-primary-600 rounded-[2.5rem] flex items-center justify-center mx-auto mb-4 border-2 border-primary-200 dark:border-primary-800 shadow-inner">
           <Building2 className="w-12 h-12" />
@@ -63,108 +92,95 @@ const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang }) => {
         <p className="text-gray-500 dark:text-gray-400 font-medium tracking-tight uppercase text-xs tracking-[0.2em]">Identité & Configuration</p>
       </div>
 
-      <form onSubmit={handleSaveClick} className="space-y-6">
+      <div className="space-y-6">
         {/* General Section */}
-        <div className="bg-white dark:bg-gray-800 p-8 lg:p-10 rounded-[3rem] border border-gray-100 dark:border-gray-700 shadow-xl shadow-gray-200/40 dark:shadow-none space-y-8">
-          <div className="flex items-center gap-3 border-b border-gray-50 dark:border-gray-700 pb-4">
-            <Smartphone className="w-5 h-5 text-primary-500" />
-            <h3 className="font-black text-lg text-gray-900 dark:text-white">{t.generalSettings}</h3>
-          </div>
+        <form onSubmit={handleSaveClick} className="space-y-6">
+            <div className="bg-white dark:bg-gray-800 p-8 lg:p-10 rounded-[3rem] border border-gray-100 dark:border-gray-700 shadow-xl shadow-gray-200/40 dark:shadow-none space-y-8">
+              <div className="flex items-center gap-3 border-b border-gray-50 dark:border-gray-700 pb-4">
+                <Smartphone className="w-5 h-5 text-primary-500" />
+                <h3 className="font-black text-lg text-gray-900 dark:text-white">{t.generalSettings}</h3>
+              </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-1">{t.agencyName}</label>
-              <input 
-                type="text" 
-                className="w-full px-6 py-5 bg-gray-50 dark:bg-gray-900/50 border-2 border-transparent focus:border-primary-500/30 rounded-2xl font-bold transition-all outline-none"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-              />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-1">{t.agencyName}</label>
+                  <input type="text" className="w-full px-6 py-5 bg-gray-50 dark:bg-gray-900/50 border-2 border-transparent focus:border-primary-500/30 rounded-2xl font-bold transition-all outline-none" value={name} onChange={(e) => setName(e.target.value)} required />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-1">{t.currency}</label>
+                  <select className="w-full px-6 py-5 bg-gray-50 dark:bg-gray-900/50 border-2 border-transparent focus:border-primary-500/30 rounded-2xl font-bold transition-all outline-none appearance-none" value={currency} onChange={(e) => setCurrency(e.target.value)}>
+                    <option value="GNF">GNF (Guinean Franc)</option>
+                    <option value="USD">USD (Dollar)</option>
+                    <option value="EUR">EUR (Euro)</option>
+                    <option value="XOF">CFA (Franc CFA)</option>
+                  </select>
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-1">{t.contactPhone}</label>
+                  <input type="tel" placeholder="+224 ..." className="w-full px-6 py-5 bg-gray-50 dark:bg-gray-900/50 border-2 border-transparent focus:border-primary-500/30 rounded-2xl font-bold transition-all outline-none" value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} />
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white dark:bg-gray-800 p-8 lg:p-10 rounded-[3rem] border border-gray-100 dark:border-gray-700 shadow-xl shadow-gray-200/40 dark:shadow-none space-y-8">
+              <div className="flex items-center gap-3 border-b border-gray-50 dark:border-gray-700 pb-4">
+                <MessageSquare className="w-5 h-5 text-primary-500" />
+                <h3 className="font-black text-lg text-gray-900 dark:text-white">{t.receiptSettings}</h3>
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-1">{t.receiptHeader}</label>
+                <textarea rows={3} className="w-full px-6 py-5 bg-gray-50 dark:bg-gray-900/50 border-2 border-transparent focus:border-primary-500/30 rounded-2xl font-medium transition-all outline-none resize-none" placeholder="Ex: *MERCI DE VOTRE VISITE*" value={receiptHeader} onChange={(e) => setReceiptHeader(e.target.value)} />
+              </div>
+            </div>
+
+            <button type="submit" disabled={saved} className={`w-full py-6 rounded-[1.5rem] font-black text-lg flex items-center justify-center gap-4 transition-all active:scale-[0.98] shadow-2xl ${saved ? 'bg-green-500 text-white' : 'bg-primary-600 text-white hover:bg-primary-700 shadow-primary-500/40'}`}>
+              {saved ? (<><CheckCircle className="w-6 h-6 animate-bounce" /> Configuration Enregistrée</>) : (<><Save className="w-6 h-6" /> {t.saveSettings}</>)}
+            </button>
+        </form>
+
+        {/* Section Sécurité : Changement de MDP personnel */}
+        <div className="bg-white dark:bg-gray-800 p-8 lg:p-10 rounded-[3rem] border border-gray-100 dark:border-gray-700 shadow-xl shadow-gray-200/40 dark:shadow-none space-y-8">
+            <div className="flex items-center gap-3 border-b border-gray-50 dark:border-gray-700 pb-4">
+                <ShieldCheck className="w-5 h-5 text-amber-500" />
+                <h3 className="font-black text-lg text-gray-900 dark:text-white">{t.security}</h3>
             </div>
             
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-1">{t.currency}</label>
-              <select 
-                className="w-full px-6 py-5 bg-gray-50 dark:bg-gray-900/50 border-2 border-transparent focus:border-primary-500/30 rounded-2xl font-bold transition-all outline-none appearance-none"
-                value={currency}
-                onChange={(e) => setCurrency(e.target.value)}
-              >
-                <option value="GNF">GNF (Guinean Franc)</option>
-                <option value="USD">USD (Dollar)</option>
-                <option value="EUR">EUR (Euro)</option>
-                <option value="XOF">CFA (Franc CFA)</option>
-              </select>
-            </div>
-
-            <div className="space-y-2 md:col-span-2">
-              <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-1">{t.contactPhone}</label>
-              <input 
-                type="tel" 
-                placeholder="+224 ..."
-                className="w-full px-6 py-5 bg-gray-50 dark:bg-gray-900/50 border-2 border-transparent focus:border-primary-500/30 rounded-2xl font-bold transition-all outline-none"
-                value={contactPhone}
-                onChange={(e) => setContactPhone(e.target.value)}
-              />
-            </div>
-          </div>
+            <form onSubmit={handlePasswordChange} className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2 relative">
+                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-1">{t.newPassword}</label>
+                        <div className="relative">
+                            <input 
+                                type={showPwd ? "text" : "password"} 
+                                className="w-full px-6 py-5 bg-gray-50 dark:bg-gray-900/50 border-2 border-transparent focus:border-amber-500/30 rounded-2xl font-bold transition-all outline-none"
+                                value={newPassword}
+                                onChange={(e) => setNewPassword(e.target.value)}
+                                required
+                                minLength={6}
+                            />
+                            <button type="button" onClick={() => setShowPwd(!showPwd)} className="absolute right-5 top-1/2 -translate-y-1/2 text-gray-400">
+                                {showPwd ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                            </button>
+                        </div>
+                    </div>
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-1">{t.confirmPassword}</label>
+                        <input 
+                            type={showPwd ? "text" : "password"} 
+                            className="w-full px-6 py-5 bg-gray-50 dark:bg-gray-900/50 border-2 border-transparent focus:border-amber-500/30 rounded-2xl font-bold transition-all outline-none"
+                            value={confirmPassword}
+                            onChange={(e) => setConfirmPassword(e.target.value)}
+                            required
+                        />
+                    </div>
+                </div>
+                <button type="submit" disabled={pwdLoading} className="w-full py-5 rounded-2xl font-black text-xs uppercase tracking-widest bg-amber-500 text-white shadow-lg shadow-amber-500/20 active:scale-95 transition-all flex items-center justify-center gap-3">
+                    {pwdLoading ? <span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" /> : <ShieldCheck className="w-4 h-4" />}
+                    {t.changePassword}
+                </button>
+            </form>
         </div>
-
-        {/* Receipt Customization Section */}
-        <div className="bg-white dark:bg-gray-800 p-8 lg:p-10 rounded-[3rem] border border-gray-100 dark:border-gray-700 shadow-xl shadow-gray-200/40 dark:shadow-none space-y-8">
-          <div className="flex items-center gap-3 border-b border-gray-50 dark:border-gray-700 pb-4">
-            <MessageSquare className="w-5 h-5 text-primary-500" />
-            <h3 className="font-black text-lg text-gray-900 dark:text-white">{t.receiptSettings}</h3>
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-1">{t.receiptHeader}</label>
-            <textarea 
-              rows={3}
-              className="w-full px-6 py-5 bg-gray-50 dark:bg-gray-900/50 border-2 border-transparent focus:border-primary-500/30 rounded-2xl font-medium transition-all outline-none resize-none"
-              placeholder="Ex: *MERCI DE VOTRE VISITE*"
-              value={receiptHeader}
-              onChange={(e) => setReceiptHeader(e.target.value)}
-            />
-            <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest pl-1">
-              Conseil: Utilisez *texte* pour mettre en gras sur WhatsApp.
-            </p>
-          </div>
-
-          <div className="p-6 bg-blue-50 dark:bg-blue-900/20 rounded-3xl border border-blue-100/50 dark:border-blue-900/50 flex items-start gap-4">
-            <div className="w-10 h-10 bg-blue-100 dark:bg-blue-800 text-blue-600 dark:text-blue-300 rounded-xl flex items-center justify-center shrink-0">
-              <CheckCircle className="w-5 h-5" />
-            </div>
-            <p className="text-xs text-blue-700 dark:text-blue-300 font-medium leading-relaxed">
-              {lang === 'fr' 
-                ? "Ces configurations sont appliquées instantanément à tous les nouveaux reçus générés par vos vendeurs." 
-                : "These configurations are instantly applied to all new receipts generated by your sellers."}
-            </p>
-          </div>
-        </div>
-
-        <button 
-          type="submit"
-          disabled={saved}
-          className={`w-full py-6 rounded-[1.5rem] font-black text-lg flex items-center justify-center gap-4 transition-all active:scale-[0.98] shadow-2xl ${
-            saved 
-            ? 'bg-green-500 text-white' 
-            : 'bg-primary-600 text-white hover:bg-primary-700 shadow-primary-500/40'
-          }`}
-        >
-          {saved ? (
-            <>
-              <CheckCircle className="w-6 h-6 animate-bounce" />
-              Configuration Enregistrée
-            </>
-          ) : (
-            <>
-              <Save className="w-6 h-6" />
-              {t.saveSettings}
-            </>
-          )}
-        </button>
-      </form>
+      </div>
 
       {/* Confirmation Modal */}
       {showConfirm && (
@@ -178,16 +194,10 @@ const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang }) => {
               {t.confirmSaveSettings}
             </p>
             <div className="flex flex-col gap-3">
-              <button 
-                onClick={executeSave}
-                className="w-full py-5 bg-primary-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-primary-500/30 active:scale-95 transition-all"
-              >
+              <button onClick={executeSave} className="w-full py-5 bg-primary-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-primary-500/30 active:scale-95 transition-all">
                 {t.confirm}
               </button>
-              <button 
-                onClick={() => setShowConfirm(false)}
-                className="w-full py-5 bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white rounded-2xl font-black text-sm uppercase tracking-widest active:scale-95 transition-all"
-              >
+              <button onClick={() => setShowConfirm(false)} className="w-full py-5 bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white rounded-2xl font-black text-sm uppercase tracking-widest active:scale-95 transition-all">
                 {t.cancel}
               </button>
             </div>

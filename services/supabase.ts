@@ -1,13 +1,12 @@
+
 import { createClient } from '@supabase/supabase-js';
 import { UserRole, TicketStatus, UserProfile, Ticket, Sale, ActivityLog, Agency, AgencyModules, AgencySettings, AgencyStatus } from '../types';
 
 // --- CONFIGURATION SÉCURISÉE ---
 // Sur Vercel, ces valeurs seront injectées via les "Environment Variables".
-// On utilise 'any' pour éviter les erreurs de typage strict sur import.meta.env si le fichier de type manque.
 const supabaseUrl = (import.meta as any).env?.VITE_SUPABASE_URL;
 const supabaseKey = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY;
 
-// Fallback pour éviter le crash complet de l'app si les variables ne sont pas encore configurées
 const client = createClient(
   supabaseUrl || 'https://placeholder.supabase.co',
   supabaseKey || 'placeholder'
@@ -57,6 +56,15 @@ class SupabaseService {
     if (!supabaseUrl) return false;
     const { data } = await client.from('profiles').select('pin').eq('id', userId).single();
     return data?.pin === pinAttempt;
+  }
+
+  async updatePassword(userId: string, newPassword: string, actor: UserProfile): Promise<boolean> {
+    if (!supabaseUrl) return false;
+    const { error } = await client.from('profiles').update({ password: newPassword }).eq('id', userId);
+    if (!error) {
+        this.log(actor, 'USER_PASSWORD_UPDATE', `Modification MDP pour utilisateur ID ${userId}`);
+    }
+    return !error;
   }
 
   // --- LOGGING ---
