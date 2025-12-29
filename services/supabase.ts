@@ -173,19 +173,24 @@ class SupabaseService {
     const agency = await this.getAgency(id);
     const now = new Date();
     let currentExpiry = agency.expires_at ? new Date(agency.expires_at) : now;
+    let activatedAt = agency.activated_at ? new Date(agency.activated_at) : now;
     
-    // Si déjà expiré, on repart de maintenant
-    if (currentExpiry < now) currentExpiry = now;
+    // Si déjà expiré, on repart de maintenant pour la date de début de ce cycle
+    if (currentExpiry < now) {
+      activatedAt = now;
+      currentExpiry = now;
+    }
     
     const newExpiry = new Date(currentExpiry);
     newExpiry.setDate(newExpiry.getDate() + days);
     
     await client.from('agencies').update({ 
+      activated_at: activatedAt.toISOString(),
       expires_at: newExpiry.toISOString(),
       status: 'active'
     }).eq('id', id);
 
-    this.log(actor, 'AGENCY_RENEW', `Prolongation de ${days} jours pour l'agence ${agency.name}. Nouvelle échéance: ${newExpiry.toLocaleDateString()}`);
+    this.log(actor, 'AGENCY_RENEW', `Prolongation de ${days} jours pour ${agency.name}.`);
     return newExpiry.toISOString();
   }
 
