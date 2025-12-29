@@ -99,7 +99,7 @@ class SupabaseService {
       isSuper ? client.from('sales').select('amount') : client.from('sales').select('amount').eq('agency_id', aid),
       isSuper ? client.from('tickets').select('status') : client.from('tickets').select('status').eq('agency_id', aid),
       isSuper ? client.from('profiles').select('id') : client.from('profiles').select('id').eq('agency_id', aid),
-      isSuper ? client.from('agencies').select('settings, expires_at') : client.from('agencies').select('settings, expires_at').eq('id', aid).single()
+      isSuper ? client.from('agencies').select('settings') : client.from('agencies').select('settings').eq('id', aid).single()
     ]);
 
     let archRev = 0, archCount = 0;
@@ -179,36 +179,15 @@ class SupabaseService {
   async getAgencies() { return (await client.from('agencies').select('*').order('name')).data as Agency[] || []; }
   async getAgency(id: string) { return (await client.from('agencies').select('*').eq('id', id).single()).data as Agency; }
   
-  async updateSubscription(id: string, days: number, modules: AgencyModules, actor: UserProfile) {
-    if (actor.role !== UserRole.SUPER_ADMIN) throw new Error("Super-Admin requis pour cette opération.");
-    
+  async updateAgencyModules(id: string, modules: AgencyModules, actor: UserProfile) {
+    if (actor.role !== UserRole.SUPER_ADMIN) throw new Error("Super-Admin requis.");
     const { data: agency } = await client.from('agencies').select('*').eq('id', id).single();
     if (!agency) throw new Error("Agence introuvable.");
-
-    const now = new Date();
-    let currentExpiry = agency.expires_at ? new Date(agency.expires_at) : now;
-    if (isNaN(currentExpiry.getTime())) currentExpiry = now;
-
-    // Calcul cumulé ou nouveau départ
-    const startOfPeriod = currentExpiry > now ? currentExpiry : now;
-    const newExpiry = new Date(startOfPeriod);
-    if (days > 0) newExpiry.setDate(newExpiry.getDate() + days);
     
-    const updatedSettings = {
-      ...(agency.settings || {}),
-      modules: modules
-    };
-
-    const { error } = await client.from('agencies').update({ 
-      activated_at: (days > 0 ? startOfPeriod : (agency.activated_at || now)).toISOString(),
-      expires_at: newExpiry.toISOString(),
-      settings: updatedSettings,
-      status: 'active'
-    }).eq('id', id);
-
+    const updatedSettings = { ...(agency.settings || {}), modules };
+    const { error } = await client.from('agencies').update({ settings: updatedSettings }).eq('id', id);
     if (error) throw error;
-    this.log(actor, 'AGENCY_SUBSCRIPTION', `Mise à jour: +${days}j pour ${agency.name}`);
-    return newExpiry.toISOString();
+    this.log(actor, 'AGENCY_MODULES', `Modules mis à jour pour ${agency.name}`);
   }
 
   async updateAgency(id: string, name: string, settings: any, status?: AgencyStatus) {
@@ -219,14 +198,9 @@ class SupabaseService {
   }
 
   async addAgency(name: string) { 
-    const now = new Date();
-    const expiry = new Date(now);
-    expiry.setDate(expiry.getDate() + 3); // 3 jours d'essai
     return (await client.from('agencies').insert({ 
       name, 
       status: 'active', 
-      activated_at: now.toISOString(),
-      expires_at: expiry.toISOString(),
       settings: { currency: 'GNF', archived_revenue: 0, archived_sales_count: 0, modules: DEFAULT_MODULES } 
     }).select().single()).data as Agency; 
   }

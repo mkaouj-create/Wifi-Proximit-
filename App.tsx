@@ -112,18 +112,11 @@ const App: React.FC = () => {
     }
   };
 
-  const isAgencyBlocked = useMemo(() => {
-    if (!currentAgency || user?.role === UserRole.SUPER_ADMIN) return false;
-    if (currentAgency.status === 'inactive') return true;
-    if (!currentAgency.expires_at) return true;
-    return new Date(currentAgency.expires_at) < new Date();
-  }, [currentAgency, user]);
-
   const canAccess = useMemo(() => (module: string) => {
     if (user?.role === UserRole.SUPER_ADMIN) return true;
-    if (isAgencyBlocked) return false;
+    if (currentAgency?.status === 'inactive') return false;
     return (currentAgency?.settings?.modules as any)?.[module] !== false;
-  }, [user, currentAgency, isAgencyBlocked]);
+  }, [user, currentAgency]);
 
   if (!user) return (
     <div className="min-h-screen bg-primary-600 dark:bg-gray-950 flex items-center justify-center p-6 transition-all font-inter">
@@ -228,7 +221,7 @@ const App: React.FC = () => {
       </aside>
 
       <main className="p-6 lg:p-14 max-w-7xl mx-auto w-full">
-        {isAgencyBlocked ? (
+        {currentAgency?.status === 'inactive' ? (
           <div className="h-[75vh] flex flex-col items-center justify-center text-center space-y-8 animate-in slide-in-from-bottom-12 duration-700">
             <div className="relative">
                 <div className="w-32 h-32 bg-red-100 dark:bg-red-900/30 text-red-600 rounded-[3rem] flex items-center justify-center shadow-2xl animate-pulse">
@@ -239,13 +232,9 @@ const App: React.FC = () => {
                 </div>
             </div>
             <div className="space-y-4 max-w-lg">
-              <h2 className="text-4xl font-black text-gray-900 dark:text-white tracking-tight">
-                {currentAgency?.status === 'inactive' ? 'Accès Interrompu' : 'Abonnement Échu'}
-              </h2>
+              <h2 className="text-4xl font-black text-gray-900 dark:text-white tracking-tight">Accès Interrompu</h2>
               <p className="text-gray-500 dark:text-gray-400 font-medium leading-relaxed">
-                {currentAgency?.status === 'inactive' 
-                  ? "Votre compte a été suspendu par le gestionnaire système pour non-conformité ou maintenance." 
-                  : `Votre cycle d'abonnement s'est terminé le ${new Date(currentAgency?.expires_at || '').toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}.`}
+                Votre compte a été suspendu par le gestionnaire système pour non-conformité ou maintenance.
               </p>
               <div className="pt-6 flex flex-col sm:flex-row gap-4 justify-center">
                   <a href={`tel:${currentAgency?.settings?.contact_phone || ''}`} className="px-8 py-4 bg-primary-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-primary-500/30 hover:scale-105 transition-all flex items-center justify-center gap-2">

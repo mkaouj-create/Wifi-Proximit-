@@ -1,6 +1,6 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { Building2, Plus, Edit3, Trash2, X, Search, AlertTriangle, Loader2, Calendar, CreditCard, ChevronRight, Power, PowerOff, ShieldCheck, Clock, CheckSquare, Square, ToggleLeft, ToggleRight, Info } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Building2, Plus, Edit3, Trash2, X, Search, AlertTriangle, Loader2, ShieldCheck, CheckSquare, Square, ToggleLeft, ToggleRight, Info, Power, PowerOff } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import { Agency, UserProfile, AgencyStatus, AgencyModules } from '../types';
 import { translations, Language } from '../i18n';
@@ -11,16 +11,6 @@ interface AgencyManagerProps {
   lang: Language;
   notify: (type: 'success' | 'error' | 'info', message: string) => void;
 }
-
-const DURATION_OPTIONS = [
-  { id: '7d', label: '7 Jours', days: 7 },
-  { id: '14d', label: '14 Jours', days: 14 },
-  { id: '1m', label: '1 Mois', days: 30 },
-  { id: '2m', label: '2 Mois', days: 60 },
-  { id: '3m', label: '3 Mois', days: 90 },
-  { id: '5m', label: '5 Mois', days: 150 },
-  { id: '12m', label: '12 Mois', days: 365 },
-];
 
 const MODULE_OPTIONS: { key: keyof AgencyModules; label: string; desc: string }[] = [
   { key: 'dashboard', label: 'Tableau de Bord', desc: 'Statistiques et KPIs' },
@@ -40,8 +30,6 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang, notify }) => 
   const [search, setSearch] = useState('');
   const [newAgencyName, setNewAgencyName] = useState('');
   
-  // États de la modale d'abonnement
-  const [selectedDurations, setSelectedDurations] = useState<string[]>([]);
   const [selectedModules, setSelectedModules] = useState<AgencyModules>({
     dashboard: true, sales: true, history: true, tickets: true, team: true, tasks: true
   });
@@ -55,7 +43,6 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang, notify }) => 
         setSelectedModules(agencyToManage.settings?.modules || {
             dashboard: true, sales: true, history: true, tickets: true, team: true, tasks: true
         });
-        setSelectedDurations([]); // Reset durées lors de l'ouverture
     }
   }, [agencyToManage]);
 
@@ -64,32 +51,12 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang, notify }) => 
     setAgencies(data);
   };
 
-  const totalDaysToAdd = useMemo(() => {
-    return selectedDurations.reduce((acc, id) => {
-        const opt = DURATION_OPTIONS.find(o => o.id === id);
-        return acc + (opt?.days || 0);
-    }, 0);
-  }, [selectedDurations]);
-
-  const newExpiryDate = useMemo(() => {
-    if (!agencyToManage) return null;
-    const now = new Date();
-    const currentExpiryStr = agencyToManage.expires_at;
-    let currentExpiry = currentExpiryStr ? new Date(currentExpiryStr) : now;
-    if (isNaN(currentExpiry.getTime())) currentExpiry = now;
-
-    const start = currentExpiry > now ? currentExpiry : now;
-    const end = new Date(start);
-    end.setDate(end.getDate() + totalDaysToAdd);
-    return end;
-  }, [agencyToManage, totalDaysToAdd]);
-
-  const handleUpdateSubscription = async () => {
+  const handleUpdateModules = async () => {
     if (!agencyToManage || isProcessing) return;
     setIsProcessing(true);
     try {
-      await supabase.updateSubscription(agencyToManage.id, totalDaysToAdd, selectedModules, user);
-      notify('success', `Abonnement de ${agencyToManage.name} mis à jour.`);
+      await supabase.updateAgencyModules(agencyToManage.id, selectedModules, user);
+      notify('success', `Modules de ${agencyToManage.name} mis à jour.`);
       setAgencyToManage(null);
       await loadAgencies();
     } catch (e: any) {
@@ -97,12 +64,6 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang, notify }) => 
     } finally {
       setIsProcessing(false);
     }
-  };
-
-  const toggleDuration = (id: string) => {
-    setSelectedDurations(prev => 
-        prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
-    );
   };
 
   const toggleModule = (key: keyof AgencyModules) => {
@@ -120,21 +81,6 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang, notify }) => 
     setIsProcessing(false);
   };
 
-  const getRemainingInfo = (agency: Agency) => {
-    if (agency.status === 'inactive') return { text: 'SUSPENDU', color: 'bg-gray-500 text-white', expired: true };
-    if (!agency.expires_at) return { text: 'NON ACTIVÉ', color: 'bg-red-500 text-white', expired: true };
-    
-    const expiry = new Date(agency.expires_at);
-    if (isNaN(expiry.getTime())) return { text: 'ERREUR DATE', color: 'bg-red-500 text-white', expired: true };
-    
-    const diff = expiry.getTime() - new Date().getTime();
-    const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
-    
-    if (diff <= 0) return { text: 'ACCÈS EXPIRÉ', color: 'bg-red-500 text-white', expired: true };
-    if (days === 1) return { text: 'EXPIRE DEMAIN', color: 'bg-amber-500 text-white', expired: false };
-    return { text: `${days} JOURS RESTANTS`, color: 'bg-green-100 text-green-700', expired: false };
-  };
-
   const filtered = agencies.filter(a => a.name.toLowerCase().includes(search.toLowerCase()));
 
   return (
@@ -142,7 +88,7 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang, notify }) => 
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-3xl font-black text-gray-900 dark:text-white leading-none">Gestion Agences</h2>
-          <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest mt-2">Pilotage centralisé des comptes</p>
+          <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest mt-2">Gestion centralisée des comptes permanents</p>
         </div>
         <button onClick={() => setShowAdd(true)} className="flex items-center gap-3 bg-primary-600 text-white px-6 py-4 rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl shadow-primary-500/30 active:scale-95 transition-all">
           <Plus className="w-5 h-5" /> Ajouter Agence
@@ -156,43 +102,33 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang, notify }) => 
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filtered.map(agency => {
-          const info = getRemainingInfo(agency);
+          const isActive = agency.status === 'active';
           return (
-            <div key={agency.id} className={`bg-white dark:bg-gray-800 rounded-[2.5rem] border p-8 shadow-sm transition-all flex flex-col justify-between group ${info.expired ? 'border-red-100 dark:border-red-900/30 bg-red-50/5' : 'border-gray-100 dark:border-gray-700'}`}>
+            <div key={agency.id} className={`bg-white dark:bg-gray-800 rounded-[2.5rem] border p-8 shadow-sm transition-all flex flex-col justify-between group ${!isActive ? 'border-red-100 dark:border-red-900/30 bg-red-50/5' : 'border-gray-100 dark:border-gray-700'}`}>
               <div>
                 <div className="flex items-center justify-between mb-6">
-                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${info.expired ? 'bg-red-100 text-red-600' : 'bg-primary-50 dark:bg-primary-900/20 text-primary-600'}`}>
+                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${!isActive ? 'bg-red-100 text-red-600' : 'bg-primary-50 dark:bg-primary-900/20 text-primary-600'}`}>
                     <Building2 className="w-6 h-6" />
                   </div>
-                  <div className={`px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest ${info.color}`}>
-                    {info.text}
+                  <div className={`px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest ${isActive ? 'bg-green-100 text-green-700' : 'bg-gray-500 text-white'}`}>
+                    {isActive ? 'COMPTE ACTIF' : 'ACCÈS SUSPENDU'}
                   </div>
                 </div>
                 
                 <h3 className="text-xl font-black text-gray-900 dark:text-white mb-2">{agency.name}</h3>
-                
-                <div className="space-y-3 mb-6 bg-gray-50/50 dark:bg-gray-900/30 p-5 rounded-[1.5rem] border border-gray-50 dark:border-gray-700">
-                   <div className="flex items-center justify-between text-[10px] font-bold">
-                     <div className="flex items-center gap-2 text-gray-400 uppercase"><Clock size={12}/> Début cycle</div>
-                     <span className="text-gray-900 dark:text-white">{agency.activated_at ? new Date(agency.activated_at).toLocaleDateString() : '---'}</span>
-                   </div>
-                   <div className="flex items-center justify-between text-[10px] font-black">
-                     <div className="flex items-center gap-2 text-gray-400 uppercase"><ShieldCheck size={12}/> Échéance</div>
-                     <span className={`${info.expired ? 'text-red-500' : 'text-primary-600'}`}>{agency.expires_at ? new Date(agency.expires_at).toLocaleDateString() : '---'}</span>
-                   </div>
-                </div>
+                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-6">Créé le {new Date(agency.created_at).toLocaleDateString()}</p>
               </div>
 
               <div className="flex items-center justify-between pt-6 border-t border-gray-100 dark:border-gray-700">
                  <div className="flex gap-2">
-                    <Tooltip text="Gérer durée et modules">
+                    <Tooltip text="Configurer les modules">
                         <button onClick={() => setAgencyToManage(agency)} className="flex items-center gap-2 px-5 py-3.5 bg-primary-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-primary-700 transition-all active:scale-95 shadow-lg shadow-primary-500/20">
-                          <CreditCard className="w-4 h-4" /> Abonnement
+                          <Edit3 className="w-4 h-4" /> Modules
                         </button>
                     </Tooltip>
-                    <Tooltip text={agency.status === 'active' ? 'Suspendre l\'accès' : 'Réactiver l\'accès'}>
-                        <button onClick={() => handleToggleStatus(agency)} className={`p-3.5 rounded-xl transition-all active:scale-95 ${agency.status === 'active' ? 'bg-amber-50 text-amber-600 hover:bg-amber-100' : 'bg-green-50 text-green-600 hover:bg-green-100'}`}>
-                          {agency.status === 'active' ? <PowerOff className="w-4 h-4" /> : <Power className="w-4 h-4" />}
+                    <Tooltip text={isActive ? 'Suspendre l\'accès' : 'Réactiver l\'accès'}>
+                        <button onClick={() => handleToggleStatus(agency)} className={`p-3.5 rounded-xl transition-all active:scale-95 ${isActive ? 'bg-amber-50 text-amber-600 hover:bg-amber-100' : 'bg-green-50 text-green-600 hover:bg-green-100'}`}>
+                          {isActive ? <PowerOff className="w-4 h-4" /> : <Power className="w-4 h-4" />}
                         </button>
                     </Tooltip>
                  </div>
@@ -205,17 +141,17 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang, notify }) => 
         })}
       </div>
 
-      {/* MODALE ABONNEMENT COMPLÈTE */}
+      {/* MODALE GESTION MODULES */}
       {agencyToManage && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xl animate-in fade-in duration-300">
-          <div className="bg-white dark:bg-gray-800 w-full max-w-2xl rounded-[3rem] p-10 shadow-2xl animate-in zoom-in duration-300 overflow-y-auto max-h-[90vh] no-scrollbar border border-white/5">
+          <div className="bg-white dark:bg-gray-800 w-full max-w-xl rounded-[3rem] p-10 shadow-2xl animate-in zoom-in duration-300 border border-white/5">
             <div className="flex items-center justify-between mb-8">
                 <div className="flex items-center gap-4">
                     <div className="w-12 h-12 bg-primary-50 dark:bg-primary-900/20 text-primary-600 rounded-2xl flex items-center justify-center">
-                        <CreditCard className="w-6 h-6" />
+                        <Building2 className="w-6 h-6" />
                     </div>
                     <div>
-                        <h3 className="text-2xl font-black dark:text-white leading-tight">Gérer l'Abonnement</h3>
+                        <h3 className="text-2xl font-black dark:text-white leading-tight">Accès Modules</h3>
                         <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest">{agencyToManage.name}</p>
                     </div>
                 </div>
@@ -224,91 +160,42 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang, notify }) => 
                 </button>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                {/* Section Durées */}
-                <div className="space-y-4">
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">1. Choisir Durée (Cumulable)</label>
-                    <div className="grid grid-cols-1 gap-2">
-                        {DURATION_OPTIONS.map(opt => {
-                            const isSelected = selectedDurations.includes(opt.id);
-                            return (
-                                <Tooltip key={opt.id} text={`Ajoute exactement ${opt.days} jours au cycle`}>
-                                    <button 
-                                        onClick={() => toggleDuration(opt.id)}
-                                        className={`w-full p-4 rounded-2xl border-2 transition-all flex items-center justify-between font-bold text-sm ${
-                                            isSelected 
-                                            ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20 text-primary-600' 
-                                            : 'border-gray-50 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-500'
-                                        }`}
-                                    >
-                                        <div className="flex items-center gap-3">
-                                            {isSelected ? <CheckSquare className="w-5 h-5 text-primary-600" /> : <Square className="w-5 h-5" />}
-                                            <span>{opt.label}</span>
-                                        </div>
-                                        <span className="text-[10px] font-black opacity-50">+{opt.days}j</span>
-                                    </button>
-                                </Tooltip>
-                            );
-                        })}
-                    </div>
-                </div>
-
-                {/* Section Modules */}
-                <div className="space-y-4">
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">2. Modules autorisés</label>
-                    <div className="grid grid-cols-1 gap-2">
-                        {MODULE_OPTIONS.map(opt => {
-                            const isEnabled = selectedModules[opt.key];
-                            return (
-                                <Tooltip key={opt.key} text={opt.desc}>
-                                    <button 
-                                        onClick={() => toggleModule(opt.key)}
-                                        className={`w-full p-4 rounded-2xl border transition-all flex items-center justify-between text-left ${
-                                            isEnabled 
-                                            ? 'bg-green-50/50 dark:bg-green-900/10 border-green-200 dark:border-green-800' 
-                                            : 'bg-gray-50 dark:bg-gray-900 border-gray-100 dark:border-gray-700 opacity-60'
-                                        }`}
-                                    >
-                                        <div>
-                                            <p className={`text-sm font-black ${isEnabled ? 'text-green-700 dark:text-green-400' : 'text-gray-500'}`}>{opt.label}</p>
-                                            <p className="text-[9px] text-gray-400 font-medium uppercase tracking-tighter">{opt.desc}</p>
-                                        </div>
-                                        {isEnabled ? <ToggleRight className="w-6 h-6 text-green-500" /> : <ToggleLeft className="w-6 h-6 text-gray-300" />}
-                                    </button>
-                                </Tooltip>
-                            );
-                        })}
-                    </div>
+            <div className="space-y-4 mb-8">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Modules autorisés pour ce compte</label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {MODULE_OPTIONS.map(opt => {
+                        const isEnabled = selectedModules[opt.key];
+                        return (
+                            <button 
+                                key={opt.key}
+                                onClick={() => toggleModule(opt.key)}
+                                className={`p-5 rounded-2xl border transition-all flex items-center justify-between text-left ${
+                                    isEnabled 
+                                    ? 'bg-primary-50/50 dark:bg-primary-900/10 border-primary-200 dark:border-primary-800' 
+                                    : 'bg-gray-50 dark:bg-gray-900 border-gray-100 dark:border-gray-700 opacity-60'
+                                }`}
+                            >
+                                <div>
+                                    <p className={`text-xs font-black ${isEnabled ? 'text-primary-700 dark:text-primary-400' : 'text-gray-500'}`}>{opt.label}</p>
+                                    <p className="text-[9px] text-gray-400 font-medium uppercase tracking-tighter">{opt.desc}</p>
+                                </div>
+                                {isEnabled ? <ToggleRight className="w-6 h-6 text-primary-500" /> : <ToggleLeft className="w-6 h-6 text-gray-300" />}
+                            </button>
+                        );
+                    })}
                 </div>
             </div>
 
-            {/* Aperçu Résultat */}
-            <div className="mt-10 p-6 bg-gray-50 dark:bg-gray-900 rounded-[2rem] border-2 border-dashed border-gray-200 dark:border-gray-700">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div>
-                        <div className="flex items-center gap-2 text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">
-                            <Info size={14} className="text-primary-500" /> Aperçu de l'activation
-                        </div>
-                        <p className="text-sm font-bold dark:text-white">
-                            Ajout : <span className="text-primary-600">{totalDaysToAdd} jours</span>
-                        </p>
-                        <p className="text-xs text-gray-500">
-                            {totalDaysToAdd > 0 ? (
-                                <>Nouvelle échéance : <span className="font-black text-gray-900 dark:text-white">{newExpiryDate?.toLocaleDateString() || '---'}</span></>
-                            ) : (
-                                <span className="italic">Mise à jour des modules uniquement</span>
-                            )}
-                        </p>
-                    </div>
-                    <button 
-                        disabled={isProcessing}
-                        onClick={handleUpdateSubscription}
-                        className="px-8 py-4 bg-primary-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-primary-500/30 active:scale-95 disabled:opacity-50 transition-all flex items-center gap-3"
-                    >
-                        {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <ShieldCheck className="w-5 h-5" />}
-                        Mettre à jour
-                    </button>
-                </div>
+            <div className="flex gap-4">
+                <button onClick={() => setAgencyToManage(null)} className="flex-1 py-5 bg-gray-100 dark:bg-gray-700 rounded-2xl font-black text-xs uppercase tracking-widest">Annuler</button>
+                <button 
+                    disabled={isProcessing}
+                    onClick={handleUpdateModules}
+                    className="flex-1 py-5 bg-primary-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-primary-500/30 active:scale-95 disabled:opacity-50 transition-all flex items-center justify-center gap-3"
+                >
+                    {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <ShieldCheck className="w-5 h-5" />}
+                    Enregistrer
+                </button>
             </div>
           </div>
         </div>

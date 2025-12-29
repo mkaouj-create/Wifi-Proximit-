@@ -1,4 +1,7 @@
 
+// Define and export the Language type for use across the application
+export type Language = 'fr' | 'en';
+
 export const translations = {
   fr: {
     appName: "Wifi Proximité",
@@ -125,7 +128,7 @@ export const translations = {
     log_AGENCY_UPDATE: "Agence modifiée",
     log_AGENCY_DELETE: "Agence supprimée",
     log_AGENCY_STATUS: "Statut agence changé",
-    log_AGENCY_SUBSCRIPTION: "Abonnement mis à jour",
+    log_AGENCY_MODULES: "Modules configurés",
     log_TICKET_IMPORT: "Tickets importés",
     log_TICKET_UPDATE: "Prix mis à jour",
     log_TICKET_DELETE: "Ticket supprimé",
@@ -284,7 +287,7 @@ export const translations = {
     log_AGENCY_UPDATE: "Agency modified",
     log_AGENCY_DELETE: "Agency deleted",
     log_AGENCY_STATUS: "Agency status changed",
-    log_AGENCY_SUBSCRIPTION: "Subscription updated",
+    log_AGENCY_MODULES: "Modules configured",
     log_TICKET_IMPORT: "Tickets imported",
     log_TICKET_UPDATE: "Price updated",
     log_TICKET_DELETE: "Ticket deleted",
@@ -319,4 +322,3 @@ export const translations = {
     dataOptimized: "DB Optimized!"
   }
 };
-export type Language = 'fr' | 'en';
