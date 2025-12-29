@@ -169,17 +169,23 @@ class SupabaseService {
   }
   async deleteAgency(id: string) { await client.from('agencies').delete().eq('id', id); }
 
-  async renewAgency(id: string, days: number, actor: UserProfile) {
+  async setAgencyStatus(id: string, status: AgencyStatus, actor: UserProfile) {
+    if (actor.role !== UserRole.SUPER_ADMIN) return;
+    await client.from('agencies').update({ status }).eq('id', id);
+    this.log(actor, 'AGENCY_STATUS_CHANGE', `Statut de l'agence ID ${id} passé à ${status}`);
+  }
+
+  async renewAgency(id: string, days: number, actor: UserProfile, price?: number) {
+    if (actor.role !== UserRole.SUPER_ADMIN) throw new Error("Accès refusé");
+    
     const { data: agency, error: fetchError } = await client.from('agencies').select('*').eq('id', id).single();
     if (fetchError || !agency) throw new Error("Agence introuvable");
 
     const now = new Date();
     let currentExpiry = agency.expires_at ? new Date(agency.expires_at) : now;
     
-    // Logique de cumul : si l'abonnement est encore valide, on ajoute à la fin. 
-    // Sinon, on repart de "maintenant".
+    // Logique de cumul intelligente
     const startOfNewPeriod = currentExpiry > now ? currentExpiry : now;
-    
     const newExpiry = new Date(startOfNewPeriod);
     newExpiry.setDate(newExpiry.getDate() + days);
     
@@ -191,7 +197,7 @@ class SupabaseService {
 
     if (updateError) throw updateError;
 
-    this.log(actor, 'AGENCY_RENEW', `Prolongation de ${days} jours pour ${agency.name}. Nouvel expire: ${newExpiry.toLocaleDateString()}`);
+    this.log(actor, 'AGENCY_RENEW', `Renouvellement de ${days} jours pour ${agency.name}. (Prix: ${price || 0})`);
     return newExpiry.toISOString();
   }
 

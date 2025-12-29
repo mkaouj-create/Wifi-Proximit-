@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
-import { Building2, Plus, Edit3, Trash2, X, Search, AlertTriangle, Loader2, Calendar, CreditCard, ChevronRight } from 'lucide-react';
+import { Building2, Plus, Edit3, Trash2, X, Search, AlertTriangle, Loader2, Calendar, CreditCard, ChevronRight, Power, PowerOff, ShieldCheck, Clock } from 'lucide-react';
 import { supabase } from '../services/supabase';
-import { Agency, UserProfile } from '../types';
+import { Agency, UserProfile, AgencyStatus } from '../types';
 import { translations, Language } from '../i18n';
 
 interface AgencyManagerProps {
@@ -11,13 +11,13 @@ interface AgencyManagerProps {
 }
 
 const DURATIONS = [
-  { label: '7 JOURS', val: 7 },
-  { label: '14 JOURS', val: 14 },
-  { label: '1 MOIS', val: 30 },
-  { label: '2 MOIS', val: 60 },
-  { label: '3 MOIS', val: 90 },
-  { label: '5 MOIS', val: 150 },
-  { label: '12 MOIS', val: 365 },
+  { label: '7 Jours', val: 7, price: 'Optionnel' },
+  { label: '14 Jours', val: 14, price: 'Optionnel' },
+  { label: '1 Mois', val: 30, price: 'Configurable' },
+  { label: '2 Mois', val: 60, price: 'Configurable' },
+  { label: '3 Mois', val: 90, price: 'Configurable' },
+  { label: '5 Mois', val: 150, price: 'Configurable' },
+  { label: '12 Mois', val: 365, price: 'Configurable' },
 ];
 
 const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang }) => {
@@ -46,17 +46,32 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang }) => {
       setAgencyToRenew(null);
       await loadAgencies();
     } catch (e) {
-      console.error(e);
-      alert("Erreur critique: La mise à jour de l'abonnement a échoué.");
+      alert("Une erreur est survenue lors du renouvellement.");
     } finally {
       setIsProcessing(false);
     }
   };
 
-  const getRemainingDays = (expiresAt?: string) => {
-    if (!expiresAt) return 0;
-    const diff = new Date(expiresAt).getTime() - new Date().getTime();
-    return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+  const handleToggleStatus = async (agency: Agency) => {
+    const newStatus: AgencyStatus = agency.status === 'active' ? 'inactive' : 'active';
+    if (!confirm(`Voulez-vous vraiment ${newStatus === 'active' ? 'réactiver' : 'suspendre'} cette agence ?`)) return;
+    
+    setIsProcessing(true);
+    await supabase.setAgencyStatus(agency.id, newStatus, user);
+    await loadAgencies();
+    setIsProcessing(false);
+  };
+
+  const getRemainingInfo = (agency: Agency) => {
+    if (agency.status === 'inactive') return { text: 'SUSPENDU', color: 'bg-gray-500 text-white', expired: true };
+    if (!agency.expires_at) return { text: 'NON ACTIVÉ', color: 'bg-red-500 text-white', expired: true };
+    
+    const diff = new Date(agency.expires_at).getTime() - new Date().getTime();
+    const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
+    
+    if (diff <= 0) return { text: 'ACCÈS EXPIRÉ', color: 'bg-red-500 text-white', expired: true };
+    if (days === 1) return { text: 'EXPIRE DEMAIN', color: 'bg-amber-500 text-white', expired: false };
+    return { text: `${days} JOURS RESTANTS`, color: 'bg-green-100 text-green-700', expired: false };
   };
 
   const filtered = agencies.filter(a => a.name.toLowerCase().includes(search.toLowerCase()));
@@ -80,54 +95,58 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang }) => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filtered.map(agency => {
-          const daysLeft = getRemainingDays(agency.expires_at);
-          const isExpired = daysLeft <= 0;
+          const info = getRemainingInfo(agency);
           return (
-            <div key={agency.id} className={`bg-white dark:bg-gray-800 rounded-[2.5rem] border p-8 shadow-sm transition-all flex flex-col justify-between group ${isExpired ? 'border-red-100 dark:border-red-900/30 bg-red-50/10' : 'border-gray-100 dark:border-gray-700'}`}>
+            <div key={agency.id} className={`bg-white dark:bg-gray-800 rounded-[2.5rem] border p-8 shadow-sm transition-all flex flex-col justify-between group ${info.expired ? 'border-red-100 dark:border-red-900/30 bg-red-50/5' : 'border-gray-100 dark:border-gray-700'}`}>
               <div>
                 <div className="flex items-center justify-between mb-6">
-                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${isExpired ? 'bg-red-100 text-red-600' : 'bg-primary-50 dark:bg-primary-900/20 text-primary-600'}`}>
+                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${info.expired ? 'bg-red-100 text-red-600' : 'bg-primary-50 dark:bg-primary-900/20 text-primary-600'}`}>
                     <Building2 className="w-6 h-6" />
                   </div>
-                  <div className={`px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest ${isExpired ? 'bg-red-500 text-white' : 'bg-green-100 text-green-700'}`}>
-                    {isExpired ? 'ACCÈS EXPIRÉ' : `${daysLeft} JOURS RESTANTS`}
+                  <div className={`px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest ${info.color}`}>
+                    {info.text}
                   </div>
                 </div>
                 
                 <h3 className="text-xl font-black text-gray-900 dark:text-white mb-2">{agency.name}</h3>
                 
-                <div className="space-y-3 mb-6 bg-gray-50/50 dark:bg-gray-900/30 p-4 rounded-2xl border border-gray-50 dark:border-gray-700">
+                <div className="space-y-3 mb-6 bg-gray-50/50 dark:bg-gray-900/30 p-5 rounded-[1.5rem] border border-gray-50 dark:border-gray-700">
                    <div className="flex items-center justify-between text-[10px] font-bold">
-                     <span className="text-gray-400 uppercase">Début cycle</span>
+                     <div className="flex items-center gap-2 text-gray-400 uppercase"><Clock size={12}/> Début cycle</div>
                      <span className="text-gray-900 dark:text-white">{agency.activated_at ? new Date(agency.activated_at).toLocaleDateString() : '---'}</span>
                    </div>
                    <div className="flex items-center justify-between text-[10px] font-black">
-                     <span className="text-gray-400 uppercase">Prochaine Échéance</span>
-                     <span className={`${isExpired ? 'text-red-500' : 'text-primary-600'}`}>{agency.expires_at ? new Date(agency.expires_at).toLocaleDateString() : '---'}</span>
+                     <div className="flex items-center gap-2 text-gray-400 uppercase"><ShieldCheck size={12}/> Échéance</div>
+                     <span className={`${info.expired ? 'text-red-500' : 'text-primary-600'}`}>{agency.expires_at ? new Date(agency.expires_at).toLocaleDateString() : '---'}</span>
                    </div>
                 </div>
               </div>
 
               <div className="flex items-center justify-between pt-6 border-t border-gray-100 dark:border-gray-700">
-                 <button onClick={() => setAgencyToRenew(agency)} className="flex items-center gap-2 px-4 py-3 bg-primary-600 text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-primary-700 transition-all active:scale-95 shadow-lg shadow-primary-500/20">
-                   <CreditCard className="w-4 h-4" /> {isExpired ? 'Activer' : 'Prolonger'}
-                 </button>
-                 <button onClick={() => setAgencyToDelete(agency)} className="p-3 bg-red-50 dark:bg-red-900/20 text-red-500 rounded-xl hover:bg-red-100 active:scale-90 transition-all"><Trash2 className="w-4 h-4" /></button>
+                 <div className="flex gap-2">
+                    <button onClick={() => setAgencyToRenew(agency)} className="flex items-center gap-2 px-5 py-3.5 bg-primary-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-primary-700 transition-all active:scale-95 shadow-lg shadow-primary-500/20">
+                      <CreditCard className="w-4 h-4" /> Abonner
+                    </button>
+                    <button onClick={() => handleToggleStatus(agency)} className={`p-3.5 rounded-xl transition-all active:scale-95 ${agency.status === 'active' ? 'bg-amber-50 text-amber-600 hover:bg-amber-100' : 'bg-green-50 text-green-600 hover:bg-green-100'}`} title={agency.status === 'active' ? 'Suspendre' : 'Réactiver'}>
+                      {agency.status === 'active' ? <PowerOff className="w-4 h-4" /> : <Power className="w-4 h-4" />}
+                    </button>
+                 </div>
+                 <button onClick={() => setAgencyToDelete(agency)} className="p-3.5 bg-red-50 dark:bg-red-900/20 text-red-500 rounded-xl hover:bg-red-100 active:scale-90 transition-all"><Trash2 className="w-4 h-4" /></button>
               </div>
             </div>
           );
         })}
       </div>
 
-      {/* MODALE D'ACTIVATION (Design fidèle à l'image fournie) */}
+      {/* MODALE ABONNEMENT (Design Dark/Mikhmon Style) */}
       {agencyToRenew && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/80 backdrop-blur-xl animate-in fade-in duration-300">
           <div className="bg-[#1a232e] w-full max-w-sm rounded-[3rem] p-10 shadow-2xl animate-in zoom-in duration-300 text-center border border-white/5">
-            <div className="w-20 h-20 bg-[#1e2d3d] text-[#0ea5e9] rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-inner">
+            <div className="w-20 h-20 bg-[#1e2d3d] text-[#0ea5e9] rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-inner ring-1 ring-white/5">
                 <Calendar className="w-10 h-10" />
             </div>
             
-            <h3 className="text-3xl font-black text-white mb-2">Activation d'accès</h3>
+            <h3 className="text-3xl font-black text-white mb-2">Cycle d'Accès</h3>
             <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest mb-10">{agencyToRenew.name}</p>
 
             <div className="grid grid-cols-1 gap-3 mb-10">
@@ -136,9 +155,12 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang }) => {
                         key={d.val} 
                         onClick={() => handleRenew(d.val)}
                         disabled={isProcessing}
-                        className="group w-full p-5 bg-[#141b25] hover:bg-[#0ea5e9] rounded-2xl flex items-center justify-between transition-all active:scale-95 border border-white/5 disabled:opacity-50"
+                        className="group w-full p-5 bg-[#141b25] hover:bg-[#0ea5e9] rounded-[1.2rem] flex items-center justify-between transition-all active:scale-95 border border-white/5 disabled:opacity-50"
                     >
-                        <span className="text-white font-black text-sm tracking-wide group-hover:translate-x-1 transition-transform">{d.label}</span>
+                        <div className="text-left">
+                            <span className="text-white font-black text-sm tracking-wide block group-hover:translate-x-1 transition-transform">{d.label}</span>
+                            <span className="text-[9px] text-gray-500 font-bold group-hover:text-white/80">{d.price}</span>
+                        </div>
                         {isProcessing ? (
                            <Loader2 className="w-4 h-4 text-white animate-spin" />
                         ) : (
@@ -186,7 +208,7 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang }) => {
             <form onSubmit={async (e) => { e.preventDefault(); if(!newAgencyName) return; await supabase.addAgency(newAgencyName); setNewAgencyName(''); setShowAdd(false); loadAgencies(); }} className="space-y-6">
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-2">Nom commercial</label>
-                <input type="text" className="w-full px-7 py-5 bg-gray-50 dark:bg-gray-900 border-none rounded-2xl focus:ring-4 focus:ring-primary-500/10 font-bold dark:text-white" value={newAgencyName} onChange={(e) => setNewAgencyName(e.target.value)} required placeholder="Ex: Wifi Hamdallaye" />
+                <input type="text" className="w-full px-7 py-5 bg-gray-50 dark:bg-gray-900 border-none rounded-2xl focus:ring-4 focus:ring-primary-500/10 font-bold dark:text-white" value={newAgencyName} onChange={(e) => setNewAgencyName(e.target.value)} required placeholder="Ex: Wifi Pro Conakry" />
               </div>
               <button type="submit" className="w-full py-5 bg-primary-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-primary-500/30">Créer l'agence</button>
             </form>
