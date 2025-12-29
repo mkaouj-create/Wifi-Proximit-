@@ -1,6 +1,6 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { Search, FileUp, X, Check, Edit2, Tags, Info, Building2, ChevronDown, Filter, Trash2, AlertTriangle, Loader2 } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Search, FileUp, X, Edit2, Trash2, Loader2, Tags, Layers, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import { Ticket, UserProfile, TicketStatus, UserRole, Agency } from '../types';
 import { translations, Language } from '../i18n';
@@ -13,11 +13,11 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language }> = ({ user, 
   const [selectedAgency, setSelectedAgency] = useState('ALL');
   const [loading, setLoading] = useState(false);
   
-  // Modals
   const [showImport, setShowImport] = useState(false);
+  const [showBulkPrice, setShowBulkPrice] = useState(false);
   const [editingTicket, setEditingTicket] = useState<Ticket | null>(null);
-  const [ticketToDelete, setTicketToDelete] = useState<Ticket | null>(null);
   const [newPrice, setNewPrice] = useState('');
+  const [bulkProfile, setBulkProfile] = useState('');
 
   const t = translations[lang];
   const isSuper = user.role === UserRole.SUPER_ADMIN;
@@ -35,25 +35,52 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language }> = ({ user, 
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  const uniqueProfiles = useMemo(() => 
+    Array.from(new Set(tickets.filter(tk => tk.status === TicketStatus.UNSOLD).map(tk => tk.profile))),
+    [tickets]
+  );
+
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    
+    setLoading(true);
     const reader = new FileReader();
     reader.onload = async (ev) => {
       const text = ev.target?.result as string;
-      const lines = text.split('\n').filter(l => l.trim().length > 0).slice(1);
+      const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0).slice(1);
+      
       const rows = lines.map(line => {
+        // Support virgule ou point-virgule et nettoyage des quotes
         const p = line.split(/[;,]/).map(v => v.replace(/^["']|["']$/g, '').trim());
-        return { username: p[0], password: p[1], profile: p[2], time_limit: p[3], price: parseInt(p[4]) || 0 };
-      }).filter(r => r.username);
+        return { 
+            username: p[0], 
+            password: p[1] || '', 
+            profile: p[2] || 'Default', 
+            time_limit: p[3] || 'N/A', 
+            price: parseInt(p[4]) || 0 
+        };
+      }).filter(r => r.username && r.username.length > 0);
 
       const target = isSuper ? (document.getElementById('importAid') as HTMLSelectElement).value : user.agency_id;
-      setLoading(true);
-      await supabase.importTickets(rows, user.id, target);
+      const res = await supabase.importTickets(rows, user.id, target);
+      
+      alert(`${res.success} tickets synchronisés.`);
       setShowImport(false);
       loadData();
     };
     reader.readAsText(file);
+  };
+
+  const handleBulkUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!bulkProfile || !newPrice) return;
+    setLoading(true);
+    const count = await supabase.updateProfilePrices(user.agency_id, bulkProfile, parseInt(newPrice));
+    alert(`${count} tickets "${bulkProfile}" mis à jour.`);
+    setShowBulkPrice(false);
+    setNewPrice('');
+    loadData();
   };
 
   const filtered = tickets.filter(tk => {
@@ -64,14 +91,24 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language }> = ({ user, 
   });
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-in slide-in-from-bottom-2 duration-500">
       <div className="flex justify-between items-center">
-        <div><h2 className="text-2xl font-black dark:text-white">{t.inventory}</h2><p className="text-xs text-gray-500 font-bold uppercase">{filtered.length} tickets</p></div>
-        {user.role !== UserRole.SELLER && (
-          <button onClick={() => setShowImport(true)} className="bg-primary-600 text-white px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center gap-2 shadow-lg active:scale-95 transition-all">
-            <FileUp size={18}/> {t.importCsv}
-          </button>
-        )}
+        <div>
+          <h2 className="text-2xl font-black dark:text-white">{t.inventory}</h2>
+          <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest">{filtered.length} tickets filtrés</p>
+        </div>
+        <div className="flex gap-2">
+            {user.role !== UserRole.SELLER && (
+                <>
+                <button onClick={() => setShowBulkPrice(true)} className="bg-amber-500 text-white px-4 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center gap-2 shadow-lg hover:bg-amber-600 transition-all">
+                    <Layers size={14}/> {t.bulkPrice}
+                </button>
+                <button onClick={() => setShowImport(true)} className="bg-primary-600 text-white px-4 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center gap-2 shadow-lg hover:bg-primary-700 transition-all">
+                    <FileUp size={14}/> {t.importCsv}
+                </button>
+                </>
+            )}
+        </div>
       </div>
 
       <div className="flex flex-col md:flex-row gap-4 bg-white dark:bg-gray-800 p-2 rounded-3xl shadow-sm border dark:border-gray-700">
@@ -81,38 +118,47 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language }> = ({ user, 
         </div>
         <div className="flex gap-2 border-l dark:border-gray-700 pl-2">
           {isSuper && (
-            <select className="bg-transparent text-[10px] font-black uppercase tracking-widest outline-none dark:text-white" value={selectedAgency} onChange={e => setSelectedAgency(e.target.value)}>
+            <select className="bg-transparent text-[10px] font-black uppercase tracking-widest outline-none dark:text-white cursor-pointer" value={selectedAgency} onChange={e => setSelectedAgency(e.target.value)}>
               <option value="ALL">Toutes Agences</option>
               {agencies.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
             </select>
           )}
-          <select className="bg-transparent text-[10px] font-black uppercase tracking-widest outline-none dark:text-white" value={filterStatus} onChange={e => setFilterStatus(e.target.value as any)}>
+          <select className="bg-transparent text-[10px] font-black uppercase tracking-widest outline-none dark:text-white cursor-pointer" value={filterStatus} onChange={e => setFilterStatus(e.target.value as any)}>
             <option value="ALL">Tous Statuts</option>
-            <option value="UNSOLD">{t.unsold}</option>
-            <option value="SOLD">{t.sold}</option>
+            <option value="UNSOLD">En Stock</option>
+            <option value="SOLD">Vendu</option>
           </select>
         </div>
       </div>
 
       <div className="bg-white dark:bg-gray-800 rounded-3xl overflow-hidden border dark:border-gray-700 shadow-sm">
-        {loading ? <div className="p-20 flex justify-center"><Loader2 className="animate-spin text-primary-600" size={40}/></div> : (
+        {loading ? (
+          <div className="p-20 flex flex-col items-center gap-4">
+            <Loader2 className="animate-spin text-primary-600" size={40}/>
+            <p className="text-[10px] font-black text-gray-400 uppercase">Synchronisation...</p>
+          </div>
+        ) : (
           <div className="overflow-x-auto no-scrollbar">
             <table className="w-full text-left text-sm">
               <thead className="bg-gray-50/50 dark:bg-gray-700/50 text-[10px] font-black uppercase text-gray-400">
                 <tr><th className="px-6 py-4">Utilisateur</th><th className="px-6 py-4">Forfait</th><th className="px-6 py-4 text-right">Prix</th><th className="px-6 py-4 text-center">Statut</th><th className="px-6 py-4"></th></tr>
               </thead>
               <tbody className="divide-y dark:divide-gray-700">
-                {filtered.map(tk => (
-                  <tr key={tk.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
-                    <td className="px-6 py-4"><span className="font-black dark:text-white">{tk.username}</span><br/><span className="text-[10px] text-gray-400 font-bold">{tk.time_limit}</span></td>
+                {filtered.slice(0, 100).map(tk => (
+                  <tr key={tk.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 group">
+                    <td className="px-6 py-4"><span className="font-black dark:text-white group-hover:text-primary-600 transition-colors">{tk.username}</span><br/><span className="text-[10px] text-gray-400 font-bold">{tk.time_limit}</span></td>
                     <td className="px-6 py-4"><span className="px-3 py-1 bg-gray-100 dark:bg-gray-700 rounded-lg font-bold text-[10px]">{tk.profile}</span></td>
                     <td className="px-6 py-4 text-right font-black dark:text-white">{tk.price.toLocaleString()}</td>
-                    <td className="px-6 py-4 text-center"><span className={`px-3 py-1 rounded-lg text-[10px] font-black ${tk.status === 'UNSOLD' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>{tk.status === 'UNSOLD' ? 'STOCK' : 'VENDU'}</span></td>
+                    <td className="px-6 py-4 text-center">
+                        <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-tighter ${tk.status === 'UNSOLD' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
+                            {tk.status === 'UNSOLD' ? 'STOCK' : 'VENDU'}
+                        </span>
+                    </td>
                     <td className="px-6 py-4 text-right">
                       {tk.status === 'UNSOLD' && user.role !== UserRole.SELLER && (
-                        <div className="flex justify-end gap-2">
-                          <button onClick={() => { setEditingTicket(tk); setNewPrice(tk.price.toString()); }} className="p-2 text-primary-600"><Edit2 size={16}/></button>
-                          <button onClick={() => setTicketToDelete(tk)} className="p-2 text-red-500"><Trash2 size={16}/></button>
+                        <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button onClick={() => { setEditingTicket(tk); setNewPrice(tk.price.toString()); }} className="p-2 text-primary-600 bg-primary-50 rounded-lg"><Edit2 size={14}/></button>
+                          <button onClick={async () => { if(confirm(t.confirmDeleteTicket)) { await supabase.deleteTicket(tk.id); loadData(); } }} className="p-2 text-red-500 bg-red-50 rounded-lg"><Trash2 size={14}/></button>
                         </div>
                       )}
                     </td>
@@ -124,29 +170,57 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language }> = ({ user, 
         )}
       </div>
 
-      {/* MODALS STANDARDISÉES */}
+      {/* MODAL IMPORT */}
       {showImport && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in">
           <div className="bg-white dark:bg-gray-800 w-full max-w-md rounded-[2.5rem] p-10 shadow-2xl animate-in zoom-in">
-            <h3 className="text-xl font-black mb-6 dark:text-white">{t.importCsv}</h3>
+            <h3 className="text-xl font-black mb-6 dark:text-white">Importer des tickets</h3>
+            <div className="bg-gray-50 dark:bg-gray-900 p-4 rounded-2xl mb-6 flex gap-3 items-start border border-gray-100 dark:border-gray-800">
+                <AlertTriangle size={18} className="text-amber-500 shrink-0" />
+                <p className="text-[10px] text-gray-400 font-bold uppercase leading-relaxed">
+                    Format attendu : code, mot_de_passe, profil, validité, prix.<br/>Le séparateur peut être une virgule ou un point-virgule.
+                </p>
+            </div>
             {isSuper && (
               <div className="mb-6"><label className="text-[10px] font-black text-gray-400 uppercase ml-2">Agence Cible</label>
               <select id="importAid" className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl outline-none font-bold mt-1 dark:text-white">{agencies.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
             )}
-            <input type="file" accept=".csv" onChange={handleImport} className="w-full p-8 border-4 border-dashed rounded-[2rem] text-center font-bold text-gray-400" />
-            <button onClick={() => setShowImport(false)} className="w-full mt-6 py-4 bg-gray-100 dark:bg-gray-700 rounded-2xl font-black uppercase tracking-widest text-xs">Annuler</button>
+            <input type="file" accept=".csv" onChange={handleImport} className="w-full p-8 border-4 border-dashed rounded-[2rem] text-center font-bold text-gray-400 cursor-pointer hover:border-primary-500 transition-colors" />
+            <button onClick={() => setShowImport(false)} className="w-full mt-6 py-4 bg-gray-100 dark:bg-gray-700 rounded-2xl font-black uppercase tracking-widest text-[10px]">Annuler l'import</button>
           </div>
         </div>
       )}
 
+      {/* MODAL PRIX GROUPÉ */}
+      {showBulkPrice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in">
+          <div className="bg-white dark:bg-gray-800 w-full max-w-sm rounded-[2.5rem] p-10 shadow-2xl animate-in zoom-in">
+            <h3 className="text-xl font-black mb-6 dark:text-white">{t.bulkPrice}</h3>
+            <form onSubmit={handleBulkUpdate} className="space-y-4">
+                <select className="w-full p-5 bg-gray-50 dark:bg-gray-900 rounded-2xl outline-none font-bold dark:text-white" value={bulkProfile} onChange={e => setBulkProfile(e.target.value)} required>
+                    <option value="">Sélectionner un Forfait...</option>
+                    {uniqueProfiles.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+                <input type="number" placeholder="Nouveau prix (ex: 500)" className="w-full p-5 bg-gray-50 dark:bg-gray-900 rounded-2xl outline-none font-black text-xl dark:text-white" value={newPrice} onChange={e => setNewPrice(e.target.value)} required />
+                <div className="flex gap-4 mt-6">
+                    <button type="button" onClick={() => setShowBulkPrice(false)} className="flex-1 py-4 font-black uppercase text-[10px]">Annuler</button>
+                    <button type="submit" className="flex-1 py-4 bg-amber-500 text-white rounded-2xl font-black uppercase text-[10px] shadow-lg">Modifier tout</button>
+                </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL MODIF TICKET UNIQUE */}
       {editingTicket && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
-          <div className="bg-white dark:bg-gray-800 w-full max-w-sm rounded-[2.5rem] p-10 shadow-2xl">
-            <h3 className="text-xl font-black mb-6 dark:text-white">Modifier Prix</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in">
+          <div className="bg-white dark:bg-gray-800 w-full max-w-sm rounded-[2.5rem] p-10 shadow-2xl animate-in zoom-in">
+            <h3 className="text-xl font-black mb-6 dark:text-white">Modifier le tarif</h3>
+            <p className="text-[10px] font-black text-gray-400 uppercase mb-4 tracking-widest">{editingTicket.username}</p>
             <input type="number" className="w-full p-5 bg-gray-50 dark:bg-gray-900 rounded-2xl outline-none font-black text-2xl dark:text-white" value={newPrice} onChange={e => setNewPrice(e.target.value)} autoFocus />
             <div className="flex gap-4 mt-8">
-              <button onClick={() => setEditingTicket(null)} className="flex-1 py-4 font-black uppercase text-xs">Annuler</button>
-              <button onClick={async () => { await supabase.updateTicketPrice(editingTicket.id, parseInt(newPrice)); setEditingTicket(null); loadData(); }} className="flex-1 py-4 bg-primary-600 text-white rounded-2xl font-black uppercase text-xs shadow-lg">Confirmer</button>
+              <button onClick={() => setEditingTicket(null)} className="flex-1 py-4 font-black uppercase text-[10px]">Annuler</button>
+              <button onClick={async () => { await supabase.updateTicketPrice(editingTicket.id, parseInt(newPrice)); setEditingTicket(null); loadData(); }} className="flex-1 py-4 bg-primary-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-lg">Mettre à jour</button>
             </div>
           </div>
         </div>
