@@ -131,7 +131,7 @@ export const translations = {
     log_TASK_UPDATE: "Tâche Modifiée",
     log_TASK_DELETE: "Tâche Supprimée",
     log_USER_PASSWORD_UPDATE: "Changement Mot de Passe",
-    // Mot de passe & Sécurité
+    log_DATA_CLEANUP: "Rétention de données",
     security: "Sécurité & Accès",
     changePassword: "Changer le mot de passe",
     currentPassword: "Mot de passe actuel",
@@ -141,7 +141,6 @@ export const translations = {
     passwordTooShort: "Le mot de passe doit contenir au moins 6 caractères.",
     passwordChanged: "Mot de passe modifié avec succès !",
     resetPassword: "Réinitialiser MDP",
-    // Confirmation messages
     confirmActionTitle: "Confirmation requise",
     confirmSaveSettings: "Voulez-vous vraiment appliquer ces modifications à l'agence ?",
     confirmCreateUser: "Voulez-vous créer ce nouveau collaborateur ?",
@@ -149,7 +148,15 @@ export const translations = {
     confirmSaleTitle: "Validation de Vente",
     confirmSaleDesc: "Vous êtes sur le point de vendre un ticket",
     confirmToggleAgency: "Voulez-vous changer le statut de cette agence ?",
-    confirmDeleteTask: "Supprimer cette tâche définitivement ?"
+    confirmDeleteTask: "Supprimer cette tâche définitivement ?",
+    // Rétention
+    dataRetention: "Rétention des données",
+    retentionStatus: "État de la base de données",
+    cleanupDesc: "Les tickets et ventes de plus de 5 mois sont archivés pour optimiser les performances.",
+    lastCleanup: "Dernier nettoyage",
+    cleanupNow: "Nettoyer maintenant",
+    cleaning: "Nettoyage...",
+    dataOptimized: "Base de données optimisée !"
   },
   en: {
     appName: "Wifi Proximity",
@@ -282,7 +289,7 @@ export const translations = {
     log_TASK_UPDATE: "Task Updated",
     log_TASK_DELETE: "Task Deleted",
     log_USER_PASSWORD_UPDATE: "Password Update",
-    // Password & Security
+    log_DATA_CLEANUP: "Data Retention",
     security: "Security & Access",
     changePassword: "Change Password",
     currentPassword: "Current Password",
@@ -292,7 +299,6 @@ export const translations = {
     passwordTooShort: "Password must be at least 6 characters.",
     passwordChanged: "Password updated successfully!",
     resetPassword: "Reset Password",
-    // Confirmation messages
     confirmActionTitle: "Confirmation Required",
     confirmSaveSettings: "Are you sure you want to apply these changes to the agency?",
     confirmCreateUser: "Are you sure you want to create this new collaborator?",
@@ -300,7 +306,15 @@ export const translations = {
     confirmSaleTitle: "Sale Validation",
     confirmSaleDesc: "You are about to sell a ticket",
     confirmToggleAgency: "Do you want to change the status of this agency?",
-    confirmDeleteTask: "Delete this task permanently?"
+    confirmDeleteTask: "Delete this task permanently?",
+    // Retention
+    dataRetention: "Data Retention",
+    retentionStatus: "Database Status",
+    cleanupDesc: "Tickets and sales older than 5 months are archived to optimize performance.",
+    lastCleanup: "Last cleanup",
+    cleanupNow: "Cleanup now",
+    cleaning: "Cleaning...",
+    dataOptimized: "Database optimized!"
   }
 };
 

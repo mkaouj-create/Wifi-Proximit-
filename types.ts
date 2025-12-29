@@ -93,6 +93,9 @@ export interface AgencySettings {
   currency?: string;
   contact_phone?: string;
   modules?: AgencyModules;
+  archived_revenue?: number;
+  archived_sales_count?: number;
+  last_cleanup_at?: string;
 }
 
 export interface Agency {

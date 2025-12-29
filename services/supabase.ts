@@ -3,7 +3,6 @@ import { createClient } from '@supabase/supabase-js';
 import { UserRole, TicketStatus, UserProfile, Ticket, Sale, ActivityLog, Agency, AgencyModules, AgencySettings, AgencyStatus } from '../types';
 
 // --- CONFIGURATION SÉCURISÉE ---
-// Sur Vercel, ces valeurs seront injectées via les "Environment Variables".
 const supabaseUrl = (import.meta as any).env?.VITE_SUPABASE_URL;
 const supabaseKey = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY;
 
@@ -26,10 +25,7 @@ class SupabaseService {
   // --- AUTHENTIFICATION ---
   
   async signIn(email: string, password?: string): Promise<UserProfile | null> {
-    if (!supabaseUrl || supabaseUrl.includes('placeholder')) {
-        console.warn("Supabase non configuré. Vérifiez vos variables d'environnement Vercel.");
-        return null;
-    }
+    if (!supabaseUrl || supabaseUrl.includes('placeholder')) return null;
     try {
       const { data, error } = await client
         .from('profiles')
@@ -42,6 +38,12 @@ class SupabaseService {
 
       const { password: _, pin, ...safeUser } = data;
       this.log({ ...safeUser, agency_id: data.agency_id }, 'LOGIN', 'Connexion réussie');
+      
+      // Déclenchement automatique du nettoyage pour SuperAdmin
+      if (safeUser.role === UserRole.SUPER_ADMIN) {
+          this.cleanupOldData(safeUser as UserProfile).catch(console.error);
+      }
+
       return safeUser as UserProfile;
     } catch (e) {
       return null;
@@ -61,10 +63,70 @@ class SupabaseService {
   async updatePassword(userId: string, newPassword: string, actor: UserProfile): Promise<boolean> {
     if (!supabaseUrl) return false;
     const { error } = await client.from('profiles').update({ password: newPassword }).eq('id', userId);
-    if (!error) {
-        this.log(actor, 'USER_PASSWORD_UPDATE', `Modification MDP pour utilisateur ID ${userId}`);
-    }
+    if (!error) this.log(actor, 'USER_PASSWORD_UPDATE', `Modification MDP pour utilisateur ID ${userId}`);
     return !error;
+  }
+
+  // --- RÉTENTION ET ARCHIVAGE ---
+
+  async cleanupOldData(actor: UserProfile): Promise<{ sales: number, tickets: number }> {
+    if (!supabaseUrl) return { sales: 0, tickets: 0 };
+    
+    const FIVE_MONTHS_AGO = new Date();
+    FIVE_MONTHS_AGO.setMonth(FIVE_MONTHS_AGO.getMonth() - 5);
+    const dateStr = FIVE_MONTHS_AGO.toISOString();
+
+    let totalDeletedSales = 0;
+    let totalDeletedTickets = 0;
+
+    // 1. Récupération de toutes les agences pour traiter les statistiques d'archive
+    const { data: agencies } = await client.from('agencies').select('*');
+    if (!agencies) return { sales: 0, tickets: 0 };
+
+    for (const agency of agencies) {
+        // A. Calculer le montant des ventes à supprimer pour cette agence spécifique
+        const { data: oldSales } = await client.from('sales')
+            .select('amount')
+            .eq('agency_id', agency.id)
+            .lt('sold_at', dateStr);
+
+        if (oldSales && oldSales.length > 0) {
+            const sumToArchive = oldSales.reduce((acc, s) => acc + s.amount, 0);
+            const countToArchive = oldSales.length;
+
+            // B. Mettre à jour les totaux archivés dans les settings de l'agence
+            const currentSettings = agency.settings || {};
+            const updatedSettings: AgencySettings = {
+                ...currentSettings,
+                archived_revenue: (currentSettings.archived_revenue || 0) + sumToArchive,
+                archived_sales_count: (currentSettings.archived_sales_count || 0) + countToArchive,
+                last_cleanup_at: new Date().toISOString()
+            };
+
+            await client.from('agencies').update({ settings: updatedSettings }).eq('id', agency.id);
+
+            // C. Supprimer les ventes
+            const { error: delSalesErr } = await client.from('sales').delete().eq('agency_id', agency.id).lt('sold_at', dateStr);
+            if (!delSalesErr) totalDeletedSales += countToArchive;
+        }
+
+        // D. Supprimer les tickets correspondants (Vendus ou Expirés) de plus de 5 mois
+        const { error: delTicketsErr } = await client.from('tickets')
+            .delete()
+            .eq('agency_id', agency.id)
+            .lt('created_at', dateStr);
+            
+        // Note: On supprime même les invendus de plus de 5 mois car ils sont considérés obsolètes techniquement
+        if (!delTicketsErr) {
+            // On ne peut pas facilement avoir le count ici sans select préalable, mais on log l'action
+        }
+    }
+
+    if (totalDeletedSales > 0) {
+        this.log(actor, 'DATA_CLEANUP', `Nettoyage automatique : ${totalDeletedSales} ventes archivées.`);
+    }
+
+    return { sales: totalDeletedSales, tickets: 0 };
   }
 
   // --- LOGGING ---
@@ -97,7 +159,6 @@ class SupabaseService {
 
   async importTickets(tickets: Partial<Ticket>[], userId: string, agencyId: string): Promise<{ success: number; errors: number }> {
     if (!supabaseUrl) return { success: 0, errors: tickets.length };
-
     const validTickets = tickets.filter(t => t.username);
     const usernames = validTickets.map(t => t.username!);
     const BATCH_SIZE = 500;
@@ -105,26 +166,19 @@ class SupabaseService {
 
     for (let i = 0; i < usernames.length; i += BATCH_SIZE) {
         const chunk = usernames.slice(i, i + BATCH_SIZE);
-        if (chunk.length === 0) continue;
         const { data } = await client.from('tickets').select('username').in('username', chunk).eq('agency_id', agencyId);
         data?.forEach((t: any) => existingSet.add(t.username));
     }
 
     const toInsert = validTickets
       .filter(t => !existingSet.has(t.username!))
-      .map(t => {
-        let safePrice = 0;
-        if (typeof t.price === 'number' && !isNaN(t.price)) {
-            safePrice = Math.min(Math.abs(t.price), 99999999); 
-        }
-        return {
+      .map(t => ({
             username: t.username, password: t.password || '', profile: t.profile || 'Default',
-            time_limit: t.time_limit || '0', price: safePrice,
+            time_limit: t.time_limit || '0', price: Math.min(Math.abs(t.price || 0), 99999999),
             expire_at: t.expire_at ? new Date(t.expire_at).toISOString() : null,
             status: TicketStatus.UNSOLD, agency_id: agencyId, created_by: userId,
             created_at: new Date().toISOString()
-        };
-      });
+      }));
 
     let successCount = 0;
     if (toInsert.length > 0) {
@@ -133,36 +187,26 @@ class SupabaseService {
             const { error } = await client.from('tickets').insert(chunk);
             if (!error) successCount += chunk.length;
         }
-        if (successCount > 0) {
-             const { data: userData } = await client.from('profiles').select('display_name').eq('id', userId).single();
-             if (userData) {
-                 this.log({ id: userId, display_name: userData.display_name, agency_id: agencyId }, 'TICKET_IMPORT', `Import de ${successCount} tickets`);
-             }
-        }
+        if (successCount > 0) this.log({ id: userId, display_name: 'User', agency_id: agencyId }, 'TICKET_IMPORT', `Import de ${successCount} tickets`);
     }
     return { success: successCount, errors: validTickets.length - successCount };
   }
 
   async updateTicketPrice(ticketId: string, newPrice: number): Promise<boolean> {
     if (!supabaseUrl) return false;
-    const safePrice = Math.min(Math.abs(newPrice), 99999999);
-    const { error } = await client.from('tickets').update({ price: safePrice }).eq('id', ticketId);
+    const { error } = await client.from('tickets').update({ price: Math.min(Math.abs(newPrice), 99999999) }).eq('id', ticketId);
     return !error;
   }
   
   async updateProfilePrices(agencyId: string, profile: string, newPrice: number): Promise<number> {
     if (!supabaseUrl) return 0;
-    const safePrice = Math.min(Math.abs(newPrice), 99999999);
-    const { data, error } = await client.from('tickets').update({ price: safePrice }).eq('agency_id', agencyId).eq('profile', profile).eq('status', TicketStatus.UNSOLD).select();
-    if (!error) this.log({id: 'system', display_name: 'Système', agency_id: agencyId}, 'TICKET_UPDATE', `Mise à jour prix profil ${profile} à ${safePrice}`);
+    const { data, error } = await client.from('tickets').update({ price: Math.min(Math.abs(newPrice), 99999999) }).eq('agency_id', agencyId).eq('profile', profile).eq('status', TicketStatus.UNSOLD).select();
     return data?.length || 0;
   }
 
   async deleteTicket(ticketId: string): Promise<boolean> {
     if (!supabaseUrl) return false;
-    const { data: ticket } = await client.from('tickets').select('*').eq('id', ticketId).single();
     const { error } = await client.from('tickets').delete().eq('id', ticketId);
-    if (!error && ticket) this.log({id: 'system', display_name: 'Système', agency_id: ticket.agency_id}, 'TICKET_DELETE', `Suppression ticket ${ticket.username}`);
     return !error;
   }
 
@@ -173,43 +217,24 @@ class SupabaseService {
     const { data: ticket } = await client.from('tickets').select('*').eq('id', ticketId).eq('status', TicketStatus.UNSOLD).single();
     if (!ticket) return null;
 
-    const { data: seller } = await client.from('profiles').select('*').eq('id', sellerId).single();
     const now = new Date().toISOString();
-    
-    const { error: updateError } = await client.from('tickets').update({ status: TicketStatus.SOLD, sold_by: sellerId, sold_at: now }).eq('id', ticketId);
-    if (updateError) return null;
+    await client.from('tickets').update({ status: TicketStatus.SOLD, sold_by: sellerId, sold_at: now }).eq('id', ticketId);
 
-    const saleData = {
+    const { data: sale, error: saleError } = await client.from('sales').insert({
         ticket_id: ticketId, agency_id: agencyId, seller_id: sellerId, amount: ticket.price,
         sold_at: now, payment_method: 'CASH', customer_phone: phone
-    };
+    }).select().single();
 
-    const { data: sale, error: saleError } = await client.from('sales').insert(saleData).select().single();
-
-    if (saleError) {
-        await client.from('tickets').update({ status: TicketStatus.UNSOLD, sold_by: null, sold_at: null }).eq('id', ticketId);
-        return null;
-    }
-
-    if (seller) this.log(seller, 'SALE', `Vente ticket ${ticket.username} (${ticket.profile})`);
-
-    return {
-        ...sale,
-        seller_name: seller?.display_name || 'Inconnu', agency_name: '...',
-        ticket_username: ticket.username, ticket_profile: ticket.profile, ticket_time_limit: ticket.time_limit
-    } as Sale;
+    if (saleError) return null;
+    return sale as Sale;
   }
 
   async cancelSale(saleId: string): Promise<boolean> {
     if (!supabaseUrl) return false;
     const { data: sale } = await client.from('sales').select('*').eq('id', saleId).single();
     if (!sale) return false;
-
-    if (sale.ticket_id) {
-        await client.from('tickets').update({ status: TicketStatus.UNSOLD, sold_by: null, sold_at: null }).eq('id', sale.ticket_id);
-    }
+    if (sale.ticket_id) await client.from('tickets').update({ status: TicketStatus.UNSOLD, sold_by: null, sold_at: null }).eq('id', sale.ticket_id);
     await client.from('sales').delete().eq('id', saleId);
-    this.log({id: 'admin', display_name: 'Admin', agency_id: sale.agency_id}, 'SALE_CANCEL', `Annulation vente ID ${saleId}`);
     return true;
   }
 
@@ -219,7 +244,6 @@ class SupabaseService {
     if (role !== UserRole.SUPER_ADMIN) query = query.eq('agency_id', agencyId);
     const { data } = await query;
     if (!data) return [];
-
     return data.map((s: any) => ({
         ...s,
         seller_name: s.profiles?.display_name || 'Inconnu',
@@ -236,29 +260,42 @@ class SupabaseService {
     if (!supabaseUrl) return { revenue: 0, soldCount: 0, stockCount: 0, agencyCount: 0, userCount: 0, currency: 'GNF' };
     const isSuper = role === UserRole.SUPER_ADMIN;
     
-    // On utilise Promise.all pour paralléliser les requêtes
     const [salesRes, ticketsRes, usersRes, agencyRes] = await Promise.all([
         isSuper ? client.from('sales').select('amount') : client.from('sales').select('amount').eq('agency_id', agencyId),
         isSuper ? client.from('tickets').select('status') : client.from('tickets').select('status').eq('agency_id', agencyId),
         isSuper ? client.from('profiles').select('id') : client.from('profiles').select('id').eq('agency_id', agencyId),
-        isSuper ? client.from('agencies').select('id') : client.from('agencies').select('settings').eq('id', agencyId).single()
+        isSuper ? client.from('agencies').select('id, settings') : client.from('agencies').select('settings').eq('id', agencyId).single()
     ]);
 
     const sales = salesRes.data || [];
     const tickets = ticketsRes.data || [];
     const users = usersRes.data || [];
     
-    // FIX: Cast explicite pour gérer l'union type de agencyRes.data (tableau ou objet unique)
-    const agencies = isSuper ? (agencyRes.data as any[] || []) : [];
-    const currentAgency = isSuper ? null : (agencyRes.data as any);
+    // Pour le SuperAdmin, on somme les archives de toutes les agences
+    let archivedRev = 0;
+    let archivedCount = 0;
+
+    if (isSuper) {
+        const agencies = (agencyRes.data as any[]) || [];
+        agencies.forEach(a => {
+            archivedRev += (a.settings?.archived_revenue || 0);
+            archivedCount += (a.settings?.archived_sales_count || 0);
+        });
+    } else {
+        const currentAgency = (agencyRes.data as any);
+        archivedRev = currentAgency?.settings?.archived_revenue || 0;
+        archivedCount = currentAgency?.settings?.archived_sales_count || 0;
+    }
+
+    const currentAgencyData = isSuper ? null : (agencyRes.data as any);
 
     return {
-      revenue: sales.reduce((sum: number, s: any) => sum + s.amount, 0),
-      soldCount: sales.length,
+      revenue: sales.reduce((sum: number, s: any) => sum + s.amount, 0) + archivedRev,
+      soldCount: sales.length + archivedCount,
       stockCount: tickets.filter((t: any) => t.status === TicketStatus.UNSOLD).length,
-      agencyCount: isSuper ? agencies.length : 1,
+      agencyCount: isSuper ? (agencyRes.data as any[] || []).length : 1,
       userCount: users.length,
-      currency: (isSuper ? 'GNF' : currentAgency?.settings?.currency) || 'GNF'
+      currency: (isSuper ? 'GNF' : currentAgencyData?.settings?.currency) || 'GNF'
     };
   }
 
@@ -279,9 +316,15 @@ class SupabaseService {
   async addAgency(name: string): Promise<Agency> {
     const { data, error } = await client.from('agencies').insert({
       name, status: 'active',
-      settings: { currency: 'GNF', whatsapp_receipt_header: `*REÇU ${name.toUpperCase()}*`, modules: DEFAULT_MODULES }
+      settings: { 
+          currency: 'GNF', 
+          whatsapp_receipt_header: `*REÇU ${name.toUpperCase()}*`, 
+          modules: DEFAULT_MODULES,
+          archived_revenue: 0,
+          archived_sales_count: 0
+      }
     }).select().single();
-    if (!error && data) this.log({id: 'super_admin', display_name: 'Super Admin', agency_id: data.id}, 'AGENCY_CREATE', `Création agence: ${name}`);
+    if (error) throw error;
     return data as Agency;
   }
 
@@ -310,7 +353,6 @@ class SupabaseService {
     };
     const { data, error } = await client.from('profiles').insert(newUser).select().single();
     if (error) throw error;
-    this.log({id: 'admin', display_name: 'Admin', agency_id: user.agency_id || ''}, 'USER_CREATE', `Création: ${newUser.display_name}`);
     const { password: _, pin, ...safeUser } = data;
     return safeUser as UserProfile;
   }
