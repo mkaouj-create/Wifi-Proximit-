@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   LayoutDashboard, ShoppingBag, Database, Users, Lock, Sun, Moon, 
-  History, Settings, Building2, ChevronRight, Eye, EyeOff, 
+  History, Settings, Building2, Eye, EyeOff, 
   KeyRound, Loader2, ClipboardList, Power, ShieldAlert, 
   CheckCircle, Info, XCircle, X, ExternalLink, ArrowLeft 
 } from 'lucide-react';
@@ -19,7 +19,8 @@ import { supabase } from './services/supabase';
 import { UserProfile, UserRole, Agency } from './types';
 import { translations, Language } from './i18n';
 
-// --- COMPOSANT TOOLTIP RÉUTILISABLE ---
+// --- TYPES & COMPOSANTS UTILITAIRES ---
+
 export const Tooltip: React.FC<{ text: string, children: React.ReactNode }> = ({ text, children }) => (
   <div className="group relative flex items-center">
     {children}
@@ -30,39 +31,41 @@ export const Tooltip: React.FC<{ text: string, children: React.ReactNode }> = ({
   </div>
 );
 
+type AppViewState = 'LANDING' | 'LOGIN' | 'LOCKED' | 'SUSPENDED' | 'DASHBOARD';
+
 const App: React.FC = () => {
-  // États de l'utilisateur et de l'agence
+  // --- ETAT GLOBAL ---
   const [user, setUser] = useState<UserProfile | null>(null);
   const [currentAgency, setCurrentAgency] = useState<Agency | null>(null);
   const [activeTab, setActiveTab] = useState('dashboard');
   
-  // Navigation Landing / Login
+  // Navigation & Auth States
   const [showLogin, setShowLogin] = useState(false);
-
-  // États de sécurité
   const [pinLocked, setPinLocked] = useState(false);
   const [pin, setPin] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
   
-  // États d'authentification temporaires
+  // Form States
+  const [showPassword, setShowPassword] = useState(false);
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   
-  // UI et Préférences
+  // UI Preferences
   const [lang] = useState<Language>('fr');
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem('theme') === 'dark');
   const [notification, setNotification] = useState<{ type: 'success' | 'error' | 'info', message: string } | null>(null);
 
   const t = translations[lang];
 
-  // Effet pour le thème
+  // --- EFFETS DE BORD ---
+
+  // Gestion du thème sombre/clair
   useEffect(() => {
     document.documentElement.classList.toggle('dark', darkMode);
     localStorage.setItem('theme', darkMode ? 'dark' : 'light');
   }, [darkMode]);
 
-  // Effet pour auto-fermer les notifications
+  // Auto-fermeture des notifications
   useEffect(() => {
     if (notification) {
       const timer = setTimeout(() => setNotification(null), 4000);
@@ -70,29 +73,40 @@ const App: React.FC = () => {
     }
   }, [notification]);
 
-  // Callback de notification mémoïsé
+  // Chargement des données de l'agence une fois connecté
+  useEffect(() => {
+    if (user?.agency_id) {
+      const fetchAgency = async () => {
+        try {
+          const data = await supabase.getAgency(user.agency_id);
+          setCurrentAgency(data);
+        } catch (error) {
+          console.error("Erreur chargement agence:", error);
+          notify('error', "Impossible de charger les données de l'agence.");
+        }
+      };
+      fetchAgency();
+    }
+  }, [user]);
+
+  // --- LOGIQUE METIER ---
+
   const notify = useCallback((type: 'success' | 'error' | 'info', message: string) => {
     setNotification({ type, message });
   }, []);
 
-  // Chargement des données de l'agence
-  const loadAgency = useCallback(async (aid: string) => {
-    try {
-      const data = await supabase.getAgency(aid);
-      setCurrentAgency(data);
-    } catch (error) {
-      console.error("Erreur chargement agence:", error);
-      notify('error', "Impossible de charger les données de l'agence.");
+  // Détermination de la vue actuelle (Routing Logique)
+  const currentView: AppViewState = useMemo(() => {
+    if (!user) {
+      return showLogin ? 'LOGIN' : 'LANDING';
     }
-  }, [notify]);
+    // L'utilisateur est connecté à partir d'ici
+    if (pinLocked) return 'LOCKED';
+    if (currentAgency?.status === 'inactive') return 'SUSPENDED';
+    return 'DASHBOARD';
+  }, [user, showLogin, pinLocked, currentAgency]);
 
-  useEffect(() => {
-    if (user?.agency_id) {
-      loadAgency(user.agency_id);
-    }
-  }, [user, loadAgency]);
-
-  // Gestion de la connexion
+  // Connexion
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!loginEmail || !loginPassword) return;
@@ -102,7 +116,8 @@ const App: React.FC = () => {
       const profile = await supabase.signIn(loginEmail, loginPassword);
       if (profile) {
         setUser(profile);
-        setPinLocked(true);
+        setPinLocked(true); // Verrouillage par défaut après connexion
+        setLoginPassword(''); // Clean password from state
         notify('success', `Bienvenue, ${profile.display_name}`);
       } else {
         notify('error', t.loginError || "Identifiants incorrects");
@@ -114,18 +129,19 @@ const App: React.FC = () => {
     }
   };
 
-  // Gestion de la déconnexion
+  // Déconnexion
   const handleLogout = useCallback(async () => {
     if (user) await supabase.signOut(user);
+    // Reset complet des états
     setUser(null);
-    setPinLocked(false);
     setCurrentAgency(null);
+    setPinLocked(false);
     setPin('');
-    setShowLogin(false); // Retour à la landing page
+    setShowLogin(false); // Retour à la Landing Page
     notify('info', 'Vous avez été déconnecté.');
   }, [user, notify]);
 
-  // Validation du code PIN
+  // Vérification PIN
   const handlePinSubmit = useCallback(async (digit: string) => {
     if (pin.length < 4) {
       const newPin = pin + digit;
@@ -153,27 +169,21 @@ const App: React.FC = () => {
     }
   }, [pin, user, t.pinError, notify]);
 
-  // Vérification des accès par module
-  const canAccess = useMemo(() => (module: string) => {
+  // Gestion des permissions modules
+  const canAccess = useCallback((module: string) => {
     if (user?.role === UserRole.SUPER_ADMIN) return true;
     if (currentAgency?.status === 'inactive') return false;
     
-    // Par défaut, si les modules ne sont pas configurés, on autorise l'accès (SaaS permanent)
     const modules = currentAgency?.settings?.modules;
-    if (!modules) return true;
+    if (!modules) return true; // Par défaut tout est accessible si non configuré
     
     return (modules as any)[module] !== false;
   }, [user, currentAgency]);
 
-  // --- RENDU CONDITIONNEL ---
+  // --- RENDU DES VUES ---
 
-  // 1. Si pas d'utilisateur et pas en mode login -> Landing Page
-  if (!user && !showLogin) {
-    return <LandingPage onLoginClick={() => setShowLogin(true)} />;
-  }
-
-  // 2. Si pas d'utilisateur mais mode login actif -> Formulaire de connexion
-  if (!user && showLogin) return (
+  // 1. Vue Login
+  const renderLogin = () => (
     <div className="min-h-screen bg-primary-600 dark:bg-gray-950 flex items-center justify-center p-6 transition-all font-inter">
       <div className="bg-white dark:bg-gray-900 w-full max-w-md rounded-[3rem] p-10 shadow-2xl space-y-8 animate-in zoom-in duration-500 relative">
         <button 
@@ -230,13 +240,13 @@ const App: React.FC = () => {
     </div>
   );
 
-  // 3. Si utilisateur connecté mais PIN verrouillé -> Écran PIN
-  if (user && pinLocked) return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex flex-col items-center justify-center p-8 space-y-10 animate-in fade-in duration-500">
+  // 2. Vue Lock Screen (PIN)
+  const renderLockScreen = () => (
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex flex-col items-center justify-center p-8 space-y-10 animate-in fade-in duration-500 font-inter">
       <div className="text-center space-y-2">
         <KeyRound className="w-12 h-12 text-primary-600 mx-auto mb-4" />
         <h2 className="text-2xl font-black dark:text-white uppercase tracking-tight">{t.secureAccess}</h2>
-        <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest">{user.display_name}</p>
+        <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest">{user?.display_name}</p>
       </div>
       
       <div className="flex gap-4">
@@ -275,26 +285,37 @@ const App: React.FC = () => {
     </div>
   );
 
-  // 4. Si utilisateur connecté et PIN déverrouillé -> App Principale
-  return (
-    <div className="min-h-screen pb-24 lg:pb-0 lg:pl-[280px] bg-gray-50 dark:bg-gray-950 transition-colors relative font-inter">
-      {/* Toast Notifications */}
-      {notification && (
-        <div className="fixed top-6 right-6 z-[200] animate-in slide-in-from-right duration-500">
-           <div className={`flex items-center gap-4 px-6 py-4 rounded-3xl shadow-2xl border backdrop-blur-xl ${
-             notification.type === 'success' ? 'bg-green-600/90 border-green-400 text-white' :
-             notification.type === 'error' ? 'bg-red-600/90 border-red-400 text-white' :
-             'bg-blue-600/90 border-blue-400 text-white'
-           }`}>
-              {notification.type === 'success' && <CheckCircle size={20} />}
-              {notification.type === 'error' && <XCircle size={20} />}
-              {notification.type === 'info' && <Info size={20} />}
-              <span className="text-xs font-black uppercase tracking-tight">{notification.message}</span>
-              <button onClick={() => setNotification(null)} className="ml-2 hover:opacity-50 transition-opacity"><X size={16}/></button>
-           </div>
+  // 3. Vue Compte Suspendu
+  const renderSuspended = () => (
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex flex-col items-center justify-center text-center space-y-8 animate-in slide-in-from-bottom-12 duration-700 font-inter p-6">
+      <div className="relative">
+          <div className="w-32 h-32 bg-red-100 dark:bg-red-900/30 text-red-600 rounded-[3rem] flex items-center justify-center shadow-2xl animate-pulse">
+            <ShieldAlert className="w-16 h-16" />
+          </div>
+          <div className="absolute -top-2 -right-2 w-10 h-10 bg-white dark:bg-gray-900 rounded-full flex items-center justify-center shadow-lg border-2 border-red-500">
+              <X className="w-6 h-6 text-red-500" />
+          </div>
+      </div>
+      <div className="space-y-4 max-w-lg">
+        <h2 className="text-4xl font-black text-gray-900 dark:text-white tracking-tight">Accès Interrompu</h2>
+        <p className="text-gray-500 dark:text-gray-400 font-medium leading-relaxed">
+          Votre compte a été suspendu par le gestionnaire système pour non-conformité ou maintenance technique.
+        </p>
+        <div className="pt-6 flex flex-col sm:flex-row gap-4 justify-center">
+            <a href={`tel:${currentAgency?.settings?.contact_phone || ''}`} className="px-8 py-4 bg-primary-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-primary-500/30 hover:scale-105 transition-all flex items-center justify-center gap-2">
+                <ExternalLink size={16} /> Contacter le Support
+            </a>
+            <button onClick={handleLogout} className="px-8 py-4 bg-gray-100 dark:bg-gray-800 text-gray-500 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-gray-200 transition-all">
+                Se déconnecter
+            </button>
         </div>
-      )}
+      </div>
+    </div>
+  );
 
+  // 4. Vue Dashboard (Application Principale)
+  const renderDashboard = () => (
+    <div className="min-h-screen pb-24 lg:pb-0 lg:pl-[280px] bg-gray-50 dark:bg-gray-950 transition-colors relative font-inter">
       {/* Header Mobile */}
       <header className="sticky top-0 z-40 bg-white/80 dark:bg-gray-900/80 backdrop-blur-md border-b dark:border-gray-800 p-4 flex justify-between lg:hidden items-center">
         <button onClick={handleLogout} className="p-3 bg-red-50 dark:bg-red-900/20 text-red-500 rounded-xl active:scale-90 transition-all"><Power size={20}/></button>
@@ -326,9 +347,9 @@ const App: React.FC = () => {
             <p className="text-[10px] font-black text-gray-400 uppercase ml-4 tracking-[0.2em] opacity-60">Administration</p>
           </div>
           
-          {user.role === UserRole.SUPER_ADMIN && <NavItem icon={<Building2/>} label={t.agencies} active={activeTab === 'agencies'} onClick={() => setActiveTab('agencies')} />}
-          {user.role !== UserRole.SELLER && <NavItem icon={<Users/>} label={t.users} active={activeTab === 'users'} onClick={() => setActiveTab('users')} />}
-          {user.role !== UserRole.SELLER && <NavItem icon={<Settings/>} label={t.settings} active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />}
+          {user!.role === UserRole.SUPER_ADMIN && <NavItem icon={<Building2/>} label={t.agencies} active={activeTab === 'agencies'} onClick={() => setActiveTab('agencies')} />}
+          {user!.role !== UserRole.SELLER && <NavItem icon={<Users/>} label={t.users} active={activeTab === 'users'} onClick={() => setActiveTab('users')} />}
+          {user!.role !== UserRole.SELLER && <NavItem icon={<Settings/>} label={t.settings} active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />}
         </nav>
 
         <div className="mt-8 flex gap-3 pt-6 border-t dark:border-gray-800">
@@ -344,48 +365,21 @@ const App: React.FC = () => {
         </div>
       </aside>
 
-      {/* Main Content */}
+      {/* Contenu Principal */}
       <main className="p-6 lg:p-14 max-w-7xl mx-auto w-full">
-        {currentAgency?.status === 'inactive' ? (
-          <div className="h-[75vh] flex flex-col items-center justify-center text-center space-y-8 animate-in slide-in-from-bottom-12 duration-700">
-            <div className="relative">
-                <div className="w-32 h-32 bg-red-100 dark:bg-red-900/30 text-red-600 rounded-[3rem] flex items-center justify-center shadow-2xl animate-pulse">
-                  <ShieldAlert className="w-16 h-16" />
-                </div>
-                <div className="absolute -top-2 -right-2 w-10 h-10 bg-white dark:bg-gray-900 rounded-full flex items-center justify-center shadow-lg border-2 border-red-500">
-                    <X className="w-6 h-6 text-red-500" />
-                </div>
-            </div>
-            <div className="space-y-4 max-w-lg">
-              <h2 className="text-4xl font-black text-gray-900 dark:text-white tracking-tight">Accès Interrompu</h2>
-              <p className="text-gray-500 dark:text-gray-400 font-medium leading-relaxed">
-                Votre compte a été suspendu par le gestionnaire système pour non-conformité ou maintenance technique.
-              </p>
-              <div className="pt-6 flex flex-col sm:flex-row gap-4 justify-center">
-                  <a href={`tel:${currentAgency?.settings?.contact_phone || ''}`} className="px-8 py-4 bg-primary-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-primary-500/30 hover:scale-105 transition-all flex items-center justify-center gap-2">
-                      <ExternalLink size={16} /> Contacter le Support
-                  </a>
-                  <button onClick={handleLogout} className="px-8 py-4 bg-gray-100 dark:bg-gray-800 text-gray-500 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-gray-200 transition-all">
-                      Se déconnecter
-                  </button>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="animate-in slide-in-from-bottom-4 duration-500">
-            {activeTab === 'dashboard' && <Dashboard user={user} lang={lang} onNavigate={setActiveTab} notify={notify} />}
-            {activeTab === 'sales' && <SalesTerminal user={user} lang={lang} notify={notify} />}
-            {activeTab === 'history' && <SalesHistory user={user} lang={lang} />}
-            {activeTab === 'tickets' && <TicketManager user={user} lang={lang} notify={notify} />}
-            {activeTab === 'tasks' && <TaskManager user={user} lang={lang} />}
-            {activeTab === 'agencies' && <AgencyManager user={user} lang={lang} notify={notify} />}
-            {activeTab === 'users' && <UserManagement user={user} lang={lang} />}
-            {activeTab === 'settings' && <AgencySettings user={user} lang={lang} />}
-          </div>
-        )}
+        <div className="animate-in slide-in-from-bottom-4 duration-500">
+          {activeTab === 'dashboard' && <Dashboard user={user!} lang={lang} onNavigate={setActiveTab} notify={notify} />}
+          {activeTab === 'sales' && <SalesTerminal user={user!} lang={lang} notify={notify} />}
+          {activeTab === 'history' && <SalesHistory user={user!} lang={lang} />}
+          {activeTab === 'tickets' && <TicketManager user={user!} lang={lang} notify={notify} />}
+          {activeTab === 'tasks' && <TaskManager user={user!} lang={lang} />}
+          {activeTab === 'agencies' && <AgencyManager user={user!} lang={lang} notify={notify} />}
+          {activeTab === 'users' && <UserManagement user={user!} lang={lang} />}
+          {activeTab === 'settings' && <AgencySettings user={user!} lang={lang} />}
+        </div>
       </main>
 
-      {/* Navigation Mobile */}
+      {/* Navigation Mobile (Bottom Bar) */}
       <nav className="fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-gray-900/95 backdrop-blur-2xl border-t dark:border-gray-800 flex justify-around p-5 lg:hidden z-50 rounded-t-[2.5rem] shadow-[0_-10px_40px_rgba(0,0,0,0.1)]">
         <MobNavItem icon={<LayoutDashboard/>} active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
         <MobNavItem icon={<ShoppingBag/>} active={activeTab === 'sales'} onClick={() => setActiveTab('sales')} />
@@ -395,9 +389,40 @@ const App: React.FC = () => {
       </nav>
     </div>
   );
+
+  // --- RENDU PRINCIPAL ---
+
+  return (
+    <>
+      {/* Toast Notification Système (Global) */}
+      {notification && (
+        <div className="fixed top-6 right-6 z-[200] animate-in slide-in-from-right duration-500 font-inter">
+           <div className={`flex items-center gap-4 px-6 py-4 rounded-3xl shadow-2xl border backdrop-blur-xl ${
+             notification.type === 'success' ? 'bg-green-600/90 border-green-400 text-white' :
+             notification.type === 'error' ? 'bg-red-600/90 border-red-400 text-white' :
+             'bg-blue-600/90 border-blue-400 text-white'
+           }`}>
+              {notification.type === 'success' && <CheckCircle size={20} />}
+              {notification.type === 'error' && <XCircle size={20} />}
+              {notification.type === 'info' && <Info size={20} />}
+              <span className="text-xs font-black uppercase tracking-tight">{notification.message}</span>
+              <button onClick={() => setNotification(null)} className="ml-2 hover:opacity-50 transition-opacity"><X size={16}/></button>
+           </div>
+        </div>
+      )}
+
+      {/* Switch sur les vues */}
+      {currentView === 'LANDING' && <LandingPage onLoginClick={() => setShowLogin(true)} />}
+      {currentView === 'LOGIN' && renderLogin()}
+      {currentView === 'LOCKED' && renderLockScreen()}
+      {currentView === 'SUSPENDED' && renderSuspended()}
+      {currentView === 'DASHBOARD' && renderDashboard()}
+    </>
+  );
 };
 
-// Composants de Navigation isolés
+// --- SOUS-COMPOSANTS ---
+
 const NavItem = ({ icon, label, active, onClick }: { icon: React.ReactElement, label: string, active: boolean, onClick: () => void }) => (
   <button 
     onClick={onClick} 
