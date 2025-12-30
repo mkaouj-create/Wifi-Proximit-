@@ -1,6 +1,11 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { LayoutDashboard, ShoppingBag, Database, Users, Lock, Sun, Moon, History, Settings, Building2, ChevronRight, Eye, EyeOff, KeyRound, Loader2, ClipboardList, Power, AlertTriangle, ShieldAlert, CheckCircle, Info, XCircle, X, ExternalLink } from 'lucide-react';
+import { 
+  LayoutDashboard, ShoppingBag, Database, Users, Lock, Sun, Moon, 
+  History, Settings, Building2, ChevronRight, Eye, EyeOff, 
+  KeyRound, Loader2, ClipboardList, Power, ShieldAlert, 
+  CheckCircle, Info, XCircle, X, ExternalLink 
+} from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import TicketManager from './components/TicketManager';
 import SalesTerminal from './components/SalesTerminal';
@@ -25,26 +30,35 @@ export const Tooltip: React.FC<{ text: string, children: React.ReactNode }> = ({
 );
 
 const App: React.FC = () => {
+  // États de l'utilisateur et de l'agence
   const [user, setUser] = useState<UserProfile | null>(null);
   const [currentAgency, setCurrentAgency] = useState<Agency | null>(null);
   const [activeTab, setActiveTab] = useState('dashboard');
+  
+  // États de sécurité
   const [pinLocked, setPinLocked] = useState(false);
   const [pin, setPin] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  
+  // États d'authentification temporaires
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  
+  // UI et Préférences
   const [lang] = useState<Language>('fr');
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem('theme') === 'dark');
   const [notification, setNotification] = useState<{ type: 'success' | 'error' | 'info', message: string } | null>(null);
 
   const t = translations[lang];
 
+  // Effet pour le thème
   useEffect(() => {
     document.documentElement.classList.toggle('dark', darkMode);
     localStorage.setItem('theme', darkMode ? 'dark' : 'light');
   }, [darkMode]);
 
+  // Effet pour auto-fermer les notifications
   useEffect(() => {
     if (notification) {
       const timer = setTimeout(() => setNotification(null), 4000);
@@ -52,72 +66,101 @@ const App: React.FC = () => {
     }
   }, [notification]);
 
+  // Callback de notification mémoïsé
   const notify = useCallback((type: 'success' | 'error' | 'info', message: string) => {
     setNotification({ type, message });
   }, []);
 
+  // Chargement des données de l'agence
   const loadAgency = useCallback(async (aid: string) => {
-    const data = await supabase.getAgency(aid);
-    setCurrentAgency(data);
-  }, []);
+    try {
+      const data = await supabase.getAgency(aid);
+      setCurrentAgency(data);
+    } catch (error) {
+      console.error("Erreur chargement agence:", error);
+      notify('error', "Impossible de charger les données de l'agence.");
+    }
+  }, [notify]);
 
   useEffect(() => {
-    if (user) loadAgency(user.agency_id);
+    if (user?.agency_id) {
+      loadAgency(user.agency_id);
+    }
   }, [user, loadAgency]);
 
+  // Gestion de la connexion
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!loginEmail || !loginPassword) return;
+    
     setIsLoading(true);
     try {
       const profile = await supabase.signIn(loginEmail, loginPassword);
       if (profile) {
         setUser(profile);
         setPinLocked(true);
-        notify('success', `Ravi de vous revoir, ${profile.display_name}`);
+        notify('success', `Bienvenue, ${profile.display_name}`);
       } else {
-        notify('error', t.loginError);
+        notify('error', t.loginError || "Identifiants incorrects");
       }
     } catch (err) {
-      notify('error', "Connexion impossible.");
+      notify('error', "Erreur de connexion au serveur.");
     } finally {
       setIsLoading(false);
     }
   };
 
+  // Gestion de la déconnexion
   const handleLogout = useCallback(async () => {
     if (user) await supabase.signOut(user);
     setUser(null);
     setPinLocked(false);
     setCurrentAgency(null);
-    notify('info', 'Déconnexion effectuée.');
+    setPin('');
+    notify('info', 'Vous avez été déconnecté.');
   }, [user, notify]);
 
-  const handlePinSubmit = async (digit: string) => {
+  // Validation du code PIN
+  const handlePinSubmit = useCallback(async (digit: string) => {
     if (pin.length < 4) {
       const newPin = pin + digit;
       setPin(newPin);
+      
       if (newPin.length === 4 && user) {
         setIsLoading(true);
-        const ok = await supabase.verifyPin(user.id, newPin);
-        if (ok) { 
-          setPinLocked(false); 
-          setPin(''); 
-          notify('success', 'Terminal déverrouillé');
-        } else { 
-          notify('error', t.pinError); 
-          setPin(''); 
+        try {
+          const isValid = await supabase.verifyPin(user.id, newPin);
+          if (isValid) { 
+            setPinLocked(false); 
+            setPin(''); 
+            notify('success', 'Terminal déverrouillé');
+          } else { 
+            notify('error', t.pinError || 'PIN incorrect'); 
+            setPin(''); 
+          }
+        } catch (error) {
+          notify('error', 'Erreur de vérification.');
+          setPin('');
+        } finally {
+          setIsLoading(false);
         }
-        setIsLoading(false);
       }
     }
-  };
+  }, [pin, user, t.pinError, notify]);
 
+  // Vérification des accès par module
   const canAccess = useMemo(() => (module: string) => {
     if (user?.role === UserRole.SUPER_ADMIN) return true;
     if (currentAgency?.status === 'inactive') return false;
-    return (currentAgency?.settings?.modules as any)?.[module] !== false;
+    
+    // Par défaut, si les modules ne sont pas configurés, on autorise l'accès (SaaS permanent)
+    const modules = currentAgency?.settings?.modules;
+    if (!modules) return true;
+    
+    return (modules as any)[module] !== false;
   }, [user, currentAgency]);
 
+  // --- ÉCRAN DE CONNEXION ---
   if (!user) return (
     <div className="min-h-screen bg-primary-600 dark:bg-gray-950 flex items-center justify-center p-6 transition-all font-inter">
       <div className="bg-white dark:bg-gray-900 w-full max-w-md rounded-[3rem] p-10 shadow-2xl space-y-8 animate-in zoom-in duration-500">
@@ -128,17 +171,39 @@ const App: React.FC = () => {
           <h1 className="text-2xl font-black dark:text-white uppercase tracking-tighter">{t.appName}</h1>
           <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest leading-none">Accès Professionnel Unifié</p>
         </div>
+        
         <form onSubmit={handleLogin} className="space-y-5">
           <div className="space-y-1">
-            <input type="email" placeholder={t.emailAddress} className="w-full p-5 bg-gray-50 dark:bg-gray-800 rounded-2xl outline-none font-bold dark:text-white border border-transparent focus:border-primary-500/50 transition-all" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} required />
+            <input 
+              type="email" 
+              placeholder={t.emailAddress} 
+              className="w-full p-5 bg-gray-50 dark:bg-gray-800 rounded-2xl outline-none font-bold dark:text-white border border-transparent focus:border-primary-500/50 transition-all" 
+              value={loginEmail} 
+              onChange={e => setLoginEmail(e.target.value)} 
+              required 
+            />
           </div>
           <div className="relative">
-            <input type={showPassword ? "text" : "password"} placeholder={t.password} className="w-full p-5 bg-gray-50 dark:bg-gray-800 rounded-2xl outline-none font-bold dark:text-white border border-transparent focus:border-primary-500/50 transition-all" value={loginPassword} onChange={e => setLoginPassword(e.target.value)} required />
-            <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-primary-500 transition-colors">
+            <input 
+              type={showPassword ? "text" : "password"} 
+              placeholder={t.password} 
+              className="w-full p-5 bg-gray-50 dark:bg-gray-800 rounded-2xl outline-none font-bold dark:text-white border border-transparent focus:border-primary-500/50 transition-all" 
+              value={loginPassword} 
+              onChange={e => setLoginPassword(e.target.value)} 
+              required 
+            />
+            <button 
+              type="button" 
+              onClick={() => setShowPassword(!showPassword)} 
+              className="absolute right-5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-primary-500 transition-colors"
+            >
               {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
             </button>
           </div>
-          <button disabled={isLoading} className="w-full py-5 bg-primary-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-primary-500/30 active:scale-95 transition-all flex justify-center items-center gap-3">
+          <button 
+            disabled={isLoading} 
+            className="w-full py-5 bg-primary-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-primary-500/30 active:scale-95 transition-all flex justify-center items-center gap-3 disabled:opacity-70"
+          >
             {isLoading ? <Loader2 className="animate-spin" /> : t.confirm}
           </button>
         </form>
@@ -146,6 +211,7 @@ const App: React.FC = () => {
     </div>
   );
 
+  // --- ÉCRAN DE VERROUILLAGE PIN ---
   if (pinLocked) return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex flex-col items-center justify-center p-8 space-y-10 animate-in fade-in duration-500">
       <div className="text-center space-y-2">
@@ -153,12 +219,35 @@ const App: React.FC = () => {
         <h2 className="text-2xl font-black dark:text-white uppercase tracking-tight">{t.secureAccess}</h2>
         <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest">{user.display_name}</p>
       </div>
+      
       <div className="flex gap-4">
-        {[0,1,2,3].map(i => <div key={i} className={`w-4 h-4 rounded-full border-2 border-primary-600 transition-all duration-300 ${pin.length > i ? 'bg-primary-600 scale-125 shadow-[0_0_15px_rgba(2,132,199,0.5)]' : ''}`} />)}
+        {[0,1,2,3].map(i => (
+          <div 
+            key={i} 
+            className={`w-4 h-4 rounded-full border-2 border-primary-600 transition-all duration-300 ${
+              pin.length > i ? 'bg-primary-600 scale-125 shadow-[0_0_15px_rgba(2,132,199,0.5)]' : ''
+            }`} 
+          />
+        ))}
       </div>
-      <div className="grid grid-cols-3 gap-6">
+
+      <div className="grid grid-cols-3 gap-6 relative">
+        {isLoading && (
+          <div className="absolute inset-0 z-10 bg-gray-50/50 dark:bg-gray-950/50 backdrop-blur-[1px] flex items-center justify-center">
+            <Loader2 className="w-10 h-10 animate-spin text-primary-600" />
+          </div>
+        )}
         {[1,2,3,4,5,6,7,8,9,'C',0,'DEL'].map(val => (
-          <button key={val} onClick={() => val === 'C' ? setPin('') : val === 'DEL' ? setPin(pin.slice(0,-1)) : handlePinSubmit(val.toString())} className="w-20 h-20 bg-white dark:bg-gray-900 rounded-full font-black text-xl shadow-sm border border-gray-100 dark:border-gray-800 active:bg-primary-600 active:text-white active:scale-90 transition-all flex items-center justify-center dark:text-white">
+          <button 
+            key={val} 
+            disabled={isLoading}
+            onClick={() => {
+              if (val === 'C') setPin('');
+              else if (val === 'DEL') setPin(pin.slice(0,-1));
+              else handlePinSubmit(val.toString());
+            }} 
+            className="w-20 h-20 bg-white dark:bg-gray-900 rounded-full font-black text-xl shadow-sm border border-gray-100 dark:border-gray-800 active:bg-primary-600 active:text-white active:scale-90 transition-all flex items-center justify-center dark:text-white hover:border-primary-500"
+          >
             {val}
           </button>
         ))}
@@ -167,8 +256,10 @@ const App: React.FC = () => {
     </div>
   );
 
+  // --- INTERFACE PRINCIPALE ---
   return (
     <div className="min-h-screen pb-24 lg:pb-0 lg:pl-[280px] bg-gray-50 dark:bg-gray-950 transition-colors relative font-inter">
+      {/* Toast Notifications */}
       {notification && (
         <div className="fixed top-6 right-6 z-[200] animate-in slide-in-from-right duration-500">
            <div className={`flex items-center gap-4 px-6 py-4 rounded-3xl shadow-2xl border backdrop-blur-xl ${
@@ -185,6 +276,7 @@ const App: React.FC = () => {
         </div>
       )}
 
+      {/* Header Mobile */}
       <header className="sticky top-0 z-40 bg-white/80 dark:bg-gray-900/80 backdrop-blur-md border-b dark:border-gray-800 p-4 flex justify-between lg:hidden items-center">
         <button onClick={handleLogout} className="p-3 bg-red-50 dark:bg-red-900/20 text-red-500 rounded-xl active:scale-90 transition-all"><Power size={20}/></button>
         <div className="flex items-center gap-2">
@@ -194,6 +286,7 @@ const App: React.FC = () => {
         <button onClick={() => setPinLocked(true)} className="p-3 bg-gray-100 dark:bg-gray-800 rounded-xl text-gray-500 active:scale-90 transition-all"><Lock size={20}/></button>
       </header>
 
+      {/* Sidebar Desktop */}
       <aside className="hidden lg:flex fixed left-0 top-0 bottom-0 w-[280px] bg-white dark:bg-gray-900 border-r dark:border-gray-800 flex-col p-8 overflow-y-auto no-scrollbar">
         <div className="flex items-center gap-4 mb-12">
           <div className="w-12 h-12 bg-primary-600 rounded-2xl flex items-center justify-center text-white font-black text-2xl shadow-xl shadow-primary-500/20">W</div>
@@ -202,24 +295,37 @@ const App: React.FC = () => {
               <p className="text-[8px] text-gray-400 font-black uppercase tracking-[0.3em] mt-1">Management</p>
           </div>
         </div>
+        
         <nav className="space-y-1.5 flex-1">
           <NavItem icon={<LayoutDashboard/>} label={t.dashboard} active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
           {canAccess('sales') && <NavItem icon={<ShoppingBag/>} label={t.terminal} active={activeTab === 'sales'} onClick={() => setActiveTab('sales')} />}
           {canAccess('history') && <NavItem icon={<History/>} label={t.history} active={activeTab === 'history'} onClick={() => setActiveTab('history')} />}
           {canAccess('tickets') && <NavItem icon={<Database/>} label={t.tickets} active={activeTab === 'tickets'} onClick={() => setActiveTab('tickets')} />}
           {canAccess('tasks') && <NavItem icon={<ClipboardList/>} label={t.tasks} active={activeTab === 'tasks'} onClick={() => setActiveTab('tasks')} />}
-          <div className="pt-8 pb-2"><p className="text-[10px] font-black text-gray-400 uppercase ml-4 tracking-[0.2em] opacity-60">Administration</p></div>
+          
+          <div className="pt-8 pb-2">
+            <p className="text-[10px] font-black text-gray-400 uppercase ml-4 tracking-[0.2em] opacity-60">Administration</p>
+          </div>
+          
           {user.role === UserRole.SUPER_ADMIN && <NavItem icon={<Building2/>} label={t.agencies} active={activeTab === 'agencies'} onClick={() => setActiveTab('agencies')} />}
           {user.role !== UserRole.SELLER && <NavItem icon={<Users/>} label={t.users} active={activeTab === 'users'} onClick={() => setActiveTab('users')} />}
           {user.role !== UserRole.SELLER && <NavItem icon={<Settings/>} label={t.settings} active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />}
         </nav>
+
         <div className="mt-8 flex gap-3 pt-6 border-t dark:border-gray-800">
-          <button onClick={() => setDarkMode(!darkMode)} className="flex-1 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-2xl flex justify-center text-gray-500 hover:text-primary-500 transition-colors">{darkMode ? <Sun size={20}/> : <Moon size={20}/>}</button>
-          <button onClick={() => setPinLocked(true)} className="flex-1 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-2xl flex justify-center text-gray-500 hover:text-primary-500 transition-colors"><Lock size={20}/></button>
-          <button onClick={handleLogout} className="flex-1 p-4 bg-red-50 dark:bg-red-900/10 rounded-2xl flex justify-center text-red-400 hover:text-red-600 transition-colors"><Power size={20}/></button>
+          <button onClick={() => setDarkMode(!darkMode)} className="flex-1 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-2xl flex justify-center text-gray-500 hover:text-primary-500 transition-colors">
+            {darkMode ? <Sun size={20}/> : <Moon size={20}/>}
+          </button>
+          <button onClick={() => setPinLocked(true)} className="flex-1 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-2xl flex justify-center text-gray-500 hover:text-primary-500 transition-colors">
+            <Lock size={20}/>
+          </button>
+          <button onClick={handleLogout} className="flex-1 p-4 bg-red-50 dark:bg-red-900/10 rounded-2xl flex justify-center text-red-400 hover:text-red-600 transition-colors">
+            <Power size={20}/>
+          </button>
         </div>
       </aside>
 
+      {/* Main Content */}
       <main className="p-6 lg:p-14 max-w-7xl mx-auto w-full">
         {currentAgency?.status === 'inactive' ? (
           <div className="h-[75vh] flex flex-col items-center justify-center text-center space-y-8 animate-in slide-in-from-bottom-12 duration-700">
@@ -234,7 +340,7 @@ const App: React.FC = () => {
             <div className="space-y-4 max-w-lg">
               <h2 className="text-4xl font-black text-gray-900 dark:text-white tracking-tight">Accès Interrompu</h2>
               <p className="text-gray-500 dark:text-gray-400 font-medium leading-relaxed">
-                Votre compte a été suspendu par le gestionnaire système pour non-conformité ou maintenance.
+                Votre compte a été suspendu par le gestionnaire système pour non-conformité ou maintenance technique.
               </p>
               <div className="pt-6 flex flex-col sm:flex-row gap-4 justify-center">
                   <a href={`tel:${currentAgency?.settings?.contact_phone || ''}`} className="px-8 py-4 bg-primary-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-primary-500/30 hover:scale-105 transition-all flex items-center justify-center gap-2">
@@ -250,16 +356,17 @@ const App: React.FC = () => {
           <div className="animate-in slide-in-from-bottom-4 duration-500">
             {activeTab === 'dashboard' && <Dashboard user={user} lang={lang} onNavigate={setActiveTab} notify={notify} />}
             {activeTab === 'sales' && <SalesTerminal user={user} lang={lang} notify={notify} />}
-            {activeTab === 'history' && <SalesHistory user={user} lang={lang} notify={notify} />}
+            {activeTab === 'history' && <SalesHistory user={user} lang={lang} />}
             {activeTab === 'tickets' && <TicketManager user={user} lang={lang} notify={notify} />}
             {activeTab === 'tasks' && <TaskManager user={user} lang={lang} />}
             {activeTab === 'agencies' && <AgencyManager user={user} lang={lang} notify={notify} />}
-            {activeTab === 'users' && <UserManagement user={user} lang={lang} notify={notify} />}
-            {activeTab === 'settings' && <AgencySettings user={user} lang={lang} notify={notify} />}
+            {activeTab === 'users' && <UserManagement user={user} lang={lang} />}
+            {activeTab === 'settings' && <AgencySettings user={user} lang={lang} />}
           </div>
         )}
       </main>
 
+      {/* Navigation Mobile */}
       <nav className="fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-gray-900/95 backdrop-blur-2xl border-t dark:border-gray-800 flex justify-around p-5 lg:hidden z-50 rounded-t-[2.5rem] shadow-[0_-10px_40px_rgba(0,0,0,0.1)]">
         <MobNavItem icon={<LayoutDashboard/>} active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
         <MobNavItem icon={<ShoppingBag/>} active={activeTab === 'sales'} onClick={() => setActiveTab('sales')} />
@@ -271,15 +378,30 @@ const App: React.FC = () => {
   );
 };
 
-const NavItem = ({ icon, label, active, onClick }: any) => (
-  <button onClick={onClick} className={`flex items-center gap-4 w-full p-4 rounded-2xl font-black text-xs uppercase tracking-[0.1em] transition-all duration-300 ${active ? 'bg-primary-600 text-white shadow-xl shadow-primary-500/20 translate-x-2' : 'text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/40 hover:text-gray-900 dark:hover:text-white'}`}>
+// Composants de Navigation isolés
+const NavItem = ({ icon, label, active, onClick }: { icon: React.ReactElement, label: string, active: boolean, onClick: () => void }) => (
+  <button 
+    onClick={onClick} 
+    className={`flex items-center gap-4 w-full p-4 rounded-2xl font-black text-xs uppercase tracking-[0.1em] transition-all duration-300 ${
+      active 
+        ? 'bg-primary-600 text-white shadow-xl shadow-primary-500/20 translate-x-2' 
+        : 'text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/40 hover:text-gray-900 dark:hover:text-white'
+    }`}
+  >
     {React.cloneElement(icon, { size: 18, strokeWidth: active ? 3 : 2 })} 
     <span className={active ? 'translate-x-1' : ''}>{label}</span>
   </button>
 );
 
-const MobNavItem = ({ icon, active, onClick }: any) => (
-  <button onClick={onClick} className={`p-4 rounded-2xl transition-all duration-300 relative ${active ? 'bg-primary-600 text-white scale-110 shadow-lg shadow-primary-500/30 -translate-y-4' : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'}`}>
+const MobNavItem = ({ icon, active, onClick }: { icon: React.ReactElement, active: boolean, onClick: () => void }) => (
+  <button 
+    onClick={onClick} 
+    className={`p-4 rounded-2xl transition-all duration-300 relative ${
+      active 
+        ? 'bg-primary-600 text-white scale-110 shadow-lg shadow-primary-500/30 -translate-y-4' 
+        : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+    }`}
+  >
     {React.cloneElement(icon, { size: 24, strokeWidth: active ? 3 : 2 })}
     {active && <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-white rounded-full"></div>}
   </button>
