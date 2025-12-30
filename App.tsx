@@ -4,7 +4,7 @@ import {
   LayoutDashboard, ShoppingBag, Database, Users, Lock, Sun, Moon, 
   History, Settings, Building2, ChevronRight, Eye, EyeOff, 
   KeyRound, Loader2, ClipboardList, Power, ShieldAlert, 
-  CheckCircle, Info, XCircle, X, ExternalLink 
+  CheckCircle, Info, XCircle, X, ExternalLink, ArrowLeft 
 } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import TicketManager from './components/TicketManager';
@@ -14,6 +14,7 @@ import SalesHistory from './components/SalesHistory';
 import AgencySettings from './components/AgencySettings';
 import AgencyManager from './components/AgencyManager';
 import TaskManager from './components/TaskManager';
+import LandingPage from './components/LandingPage';
 import { supabase } from './services/supabase';
 import { UserProfile, UserRole, Agency } from './types';
 import { translations, Language } from './i18n';
@@ -35,6 +36,9 @@ const App: React.FC = () => {
   const [currentAgency, setCurrentAgency] = useState<Agency | null>(null);
   const [activeTab, setActiveTab] = useState('dashboard');
   
+  // Navigation Landing / Login
+  const [showLogin, setShowLogin] = useState(false);
+
   // États de sécurité
   const [pinLocked, setPinLocked] = useState(false);
   const [pin, setPin] = useState('');
@@ -117,6 +121,7 @@ const App: React.FC = () => {
     setPinLocked(false);
     setCurrentAgency(null);
     setPin('');
+    setShowLogin(false); // Retour à la landing page
     notify('info', 'Vous avez été déconnecté.');
   }, [user, notify]);
 
@@ -160,11 +165,25 @@ const App: React.FC = () => {
     return (modules as any)[module] !== false;
   }, [user, currentAgency]);
 
-  // --- ÉCRAN DE CONNEXION ---
-  if (!user) return (
+  // --- RENDU CONDITIONNEL ---
+
+  // 1. Si pas d'utilisateur et pas en mode login -> Landing Page
+  if (!user && !showLogin) {
+    return <LandingPage onLoginClick={() => setShowLogin(true)} />;
+  }
+
+  // 2. Si pas d'utilisateur mais mode login actif -> Formulaire de connexion
+  if (!user && showLogin) return (
     <div className="min-h-screen bg-primary-600 dark:bg-gray-950 flex items-center justify-center p-6 transition-all font-inter">
-      <div className="bg-white dark:bg-gray-900 w-full max-w-md rounded-[3rem] p-10 shadow-2xl space-y-8 animate-in zoom-in duration-500">
-        <div className="text-center space-y-4">
+      <div className="bg-white dark:bg-gray-900 w-full max-w-md rounded-[3rem] p-10 shadow-2xl space-y-8 animate-in zoom-in duration-500 relative">
+        <button 
+          onClick={() => setShowLogin(false)}
+          className="absolute top-8 left-8 p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-gray-500"
+        >
+          <ArrowLeft size={24} />
+        </button>
+
+        <div className="text-center space-y-4 pt-4">
           <div className="w-20 h-20 bg-primary-50 dark:bg-primary-900/30 text-primary-600 rounded-[2rem] flex items-center justify-center mx-auto shadow-inner ring-1 ring-primary-100">
             <Lock className="w-10 h-10" />
           </div>
@@ -211,8 +230,8 @@ const App: React.FC = () => {
     </div>
   );
 
-  // --- ÉCRAN DE VERROUILLAGE PIN ---
-  if (pinLocked) return (
+  // 3. Si utilisateur connecté mais PIN verrouillé -> Écran PIN
+  if (user && pinLocked) return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex flex-col items-center justify-center p-8 space-y-10 animate-in fade-in duration-500">
       <div className="text-center space-y-2">
         <KeyRound className="w-12 h-12 text-primary-600 mx-auto mb-4" />
@@ -256,7 +275,7 @@ const App: React.FC = () => {
     </div>
   );
 
-  // --- INTERFACE PRINCIPALE ---
+  // 4. Si utilisateur connecté et PIN déverrouillé -> App Principale
   return (
     <div className="min-h-screen pb-24 lg:pb-0 lg:pl-[280px] bg-gray-50 dark:bg-gray-950 transition-colors relative font-inter">
       {/* Toast Notifications */}
