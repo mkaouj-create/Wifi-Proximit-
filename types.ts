@@ -64,28 +64,14 @@ export interface Sale {
   customer_phone?: string;
 }
 
-export interface Task {
+export interface CreditTransaction {
   id: string;
-  title: string;
-  description?: string;
-  status: 'TODO' | 'IN_PROGRESS' | 'DONE';
-  priority: 'LOW' | 'MEDIUM' | 'HIGH';
-  assigned_to?: string;
-  assigned_to_name?: string;
   agency_id: string;
-  due_date?: string;
+  amount: number; // Positif pour recharge, négatif pour consommation
+  type: 'RECHARGE' | 'CONSUMPTION' | 'REFUND';
+  description: string;
+  created_at: string;
   created_by: string;
-  created_at: string;
-}
-
-export interface ActivityLog {
-  id: string;
-  user_id: string;
-  user_name: string;
-  agency_id: string;
-  action: string;
-  details: string;
-  created_at: string;
 }
 
 export interface AgencySettings {
@@ -96,6 +82,7 @@ export interface AgencySettings {
   archived_revenue?: number;
   archived_sales_count?: number;
   last_cleanup_at?: string;
+  total_tickets_ever?: number; // Pour gérer la franchise des 50 premiers tickets
 }
 
 export interface Agency {
@@ -103,6 +90,18 @@ export interface Agency {
   name: string;
   status: AgencyStatus;
   owner_id?: string;
+  credits_balance: number;
   settings?: AgencySettings;
+  created_at: string;
+}
+
+// Fixed: Added ActivityLog interface to resolve import errors in SupabaseService and TaskManager
+export interface ActivityLog {
+  id: string;
+  user_id: string;
+  user_name: string;
+  agency_id: string;
+  action: string;
+  details: string;
   created_at: string;
 }

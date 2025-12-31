@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Search, FileUp, X, Edit2, Trash2, Loader2, Tags, Layers, AlertTriangle, CheckCircle2, Info } from 'lucide-react';
+import { Search, FileUp, X, Edit2, Trash2, Loader2, Tags, Layers, AlertTriangle, CheckCircle2, Info, Coins } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import { Ticket, UserProfile, TicketStatus, UserRole, Agency } from '../types';
 import { translations, Language } from '../i18n';
@@ -90,9 +90,14 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
       const targetAgency = isSuper ? (document.getElementById('importAid') as HTMLSelectElement).value : user.agency_id;
       const res = await supabase.importTickets(rows, user.id, targetAgency);
       
-      notify('success', `${res.success} tickets importés. ${res.skipped} doublons ignorés.`);
-      setShowImport(false);
-      loadData();
+      if (res.error) {
+          notify('error', res.error);
+      } else {
+          notify('success', `${res.success} tickets importés. Coût : ${res.cost || 0} crédits.`);
+          setShowImport(false);
+          loadData();
+      }
+      setLoading(false);
     };
     reader.readAsText(file);
     e.target.value = '';
@@ -217,12 +222,16 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
       {showImport && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in">
           <div className="bg-white dark:bg-gray-800 w-full max-w-md rounded-[2.5rem] p-10 shadow-2xl animate-in zoom-in">
-            <h3 className="text-xl font-black mb-6 dark:text-white">Importer des tickets Mikhmon</h3>
-            <div className="bg-gray-50 dark:bg-gray-900 p-4 rounded-2xl mb-6 flex gap-3 items-start border border-gray-100 dark:border-gray-800">
-                <AlertTriangle size={18} className="text-amber-500 shrink-0" />
-                <p className="text-[10px] text-gray-400 font-bold uppercase leading-relaxed">
-                    Le système détecte automatiquement les colonnes Username, Profile et Time Limit.<br/>Les doublons par username seront automatiquement ignorés.
-                </p>
+            <h3 className="text-xl font-black mb-6 dark:text-white">Importer des tickets</h3>
+            <div className="bg-amber-50 dark:bg-amber-900/20 p-4 rounded-2xl mb-6 flex gap-3 items-start border border-amber-100 dark:border-amber-800">
+                <Coins size={18} className="text-amber-500 shrink-0" />
+                <div className="space-y-1">
+                    <p className="text-[10px] text-amber-600 dark:text-amber-400 font-black uppercase">Règles de facturation</p>
+                    <p className="text-[10px] text-gray-500 dark:text-gray-400 font-bold leading-relaxed">
+                        1 Crédit consommé tous les 20 tickets importés.<br/>
+                        <span className="text-green-600 font-black">Vos 50 premiers tickets sont offerts !</span>
+                    </p>
+                </div>
             </div>
             {isSuper && (
               <div className="mb-6"><label className="text-[10px] font-black text-gray-400 uppercase ml-2">Agence Cible</label>

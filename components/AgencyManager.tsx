@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Building2, Plus, Edit3, Trash2, X, Search, AlertTriangle, Loader2, ShieldCheck, CheckSquare, Square, ToggleLeft, ToggleRight, Info, Power, PowerOff } from 'lucide-react';
+import { Building2, Plus, Edit3, Trash2, X, Search, AlertTriangle, Loader2, ShieldCheck, Coins, ToggleLeft, ToggleRight, Info, Power, PowerOff, Save } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import { Agency, UserProfile, AgencyStatus, AgencyModules } from '../types';
 import { translations, Language } from '../i18n';
@@ -25,10 +25,15 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang, notify }) => 
   const [agencies, setAgencies] = useState<Agency[]>([]);
   const [showAdd, setShowAdd] = useState(false);
   const [agencyToManage, setAgencyToManage] = useState<Agency | null>(null);
+  const [agencyToRecharge, setAgencyToRecharge] = useState<Agency | null>(null);
   const [agencyToDelete, setAgencyToDelete] = useState<Agency | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [search, setSearch] = useState('');
   const [newAgencyName, setNewAgencyName] = useState('');
+  
+  // États recharge
+  const [rechargeAmount, setRechargeAmount] = useState('10');
+  const [rechargeDesc, setRechargeDesc] = useState('Recharge manuelle');
   
   const [selectedModules, setSelectedModules] = useState<AgencyModules>({
     dashboard: true, sales: true, history: true, tickets: true, team: true, tasks: true
@@ -61,6 +66,23 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang, notify }) => 
       await loadAgencies();
     } catch (e: any) {
       notify('error', e.message || "Erreur lors de la mise à jour");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleRecharge = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!agencyToRecharge || isProcessing) return;
+    setIsProcessing(true);
+    try {
+      await supabase.addCredits(agencyToRecharge.id, parseInt(rechargeAmount), user.id, rechargeDesc);
+      notify('success', `${rechargeAmount} crédits ajoutés à ${agencyToRecharge.name}`);
+      setAgencyToRecharge(null);
+      setRechargeAmount('10');
+      await loadAgencies();
+    } catch (e: any) {
+      notify('error', "Échec de la recharge");
     } finally {
       setIsProcessing(false);
     }
@@ -116,18 +138,27 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang, notify }) => 
                 </div>
                 
                 <h3 className="text-xl font-black text-gray-900 dark:text-white mb-2">{agency.name}</h3>
+                <div className="flex items-center gap-3 mb-4">
+                  <Coins size={16} className="text-amber-500" />
+                  <p className="font-black text-lg dark:text-white">{agency.credits_balance} <span className="text-[10px] text-gray-400 uppercase tracking-widest">Crédits</span></p>
+                </div>
                 <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-6">Créé le {new Date(agency.created_at).toLocaleDateString()}</p>
               </div>
 
               <div className="flex items-center justify-between pt-6 border-t border-gray-100 dark:border-gray-700">
                  <div className="flex gap-2">
-                    <Tooltip text="Configurer les modules">
-                        <button onClick={() => setAgencyToManage(agency)} className="flex items-center gap-2 px-5 py-3.5 bg-primary-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-primary-700 transition-all active:scale-95 shadow-lg shadow-primary-500/20">
-                          <Edit3 className="w-4 h-4" /> Modules
+                    <Tooltip text="Crédits & Modules">
+                        <button onClick={() => setAgencyToManage(agency)} className="flex items-center gap-2 px-4 py-3 bg-primary-600 text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-primary-700 transition-all active:scale-95 shadow-lg shadow-primary-500/20">
+                          <Edit3 className="w-4 h-4" /> Config
+                        </button>
+                    </Tooltip>
+                    <Tooltip text="Recharger crédits">
+                        <button onClick={() => setAgencyToRecharge(agency)} className="p-3.5 bg-amber-100 text-amber-600 rounded-xl hover:bg-amber-200 active:scale-95 transition-all">
+                          <Plus className="w-4 h-4" />
                         </button>
                     </Tooltip>
                     <Tooltip text={isActive ? 'Suspendre l\'accès' : 'Réactiver l\'accès'}>
-                        <button onClick={() => handleToggleStatus(agency)} className={`p-3.5 rounded-xl transition-all active:scale-95 ${isActive ? 'bg-amber-50 text-amber-600 hover:bg-amber-100' : 'bg-green-50 text-green-600 hover:bg-green-100'}`}>
+                        <button onClick={() => handleToggleStatus(agency)} className={`p-3.5 rounded-xl transition-all active:scale-95 ${isActive ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-green-50 text-green-600 hover:bg-green-100'}`}>
                           {isActive ? <PowerOff className="w-4 h-4" /> : <Power className="w-4 h-4" />}
                         </button>
                     </Tooltip>
@@ -197,6 +228,48 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang, notify }) => 
                     Enregistrer
                 </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODALE RECHARGE CRÉDITS */}
+      {agencyToRecharge && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xl animate-in fade-in duration-300">
+          <div className="bg-white dark:bg-gray-800 w-full max-w-sm rounded-[3rem] p-10 shadow-2xl animate-in zoom-in duration-300">
+             <div className="text-center mb-8">
+                <div className="w-16 h-16 bg-amber-50 dark:bg-amber-900/20 text-amber-600 rounded-3xl flex items-center justify-center mx-auto mb-4">
+                    <Coins size={32} />
+                </div>
+                <h3 className="text-2xl font-black dark:text-white tracking-tight">Vente de Crédits</h3>
+                <p className="text-xs text-gray-400 font-bold uppercase tracking-widest">{agencyToRecharge.name}</p>
+             </div>
+
+             <form onSubmit={handleRecharge} className="space-y-6">
+                <div className="space-y-2">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Volume de Crédits</label>
+                    <select className="w-full p-5 bg-gray-50 dark:bg-gray-900 rounded-2xl outline-none font-black text-xl" value={rechargeAmount} onChange={(e) => setRechargeAmount(e.target.value)}>
+                        <option value="10">10 Crédits (200 tks)</option>
+                        <option value="20">20 Crédits (400 tks)</option>
+                        <option value="50">50 Crédits (1000 tks)</option>
+                        <option value="100">100 Crédits (2000 tks)</option>
+                    </select>
+                </div>
+                <div className="space-y-2">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Note / Description</label>
+                    <input type="text" className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl outline-none font-medium text-sm" value={rechargeDesc} onChange={(e) => setRechargeDesc(e.target.value)} />
+                </div>
+                <div className="flex gap-4">
+                    <button type="button" onClick={() => setAgencyToRecharge(null)} className="flex-1 py-5 bg-gray-100 dark:bg-gray-700 rounded-2xl font-black text-xs uppercase tracking-widest">Fermer</button>
+                    <button 
+                        disabled={isProcessing}
+                        type="submit" 
+                        className="flex-1 py-5 bg-amber-500 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-amber-500/30 active:scale-95 flex items-center justify-center gap-2"
+                    >
+                        {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save size={16} />}
+                        Confirmer
+                    </button>
+                </div>
+             </form>
           </div>
         </div>
       )}

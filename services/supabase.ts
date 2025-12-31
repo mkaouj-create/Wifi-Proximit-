@@ -1,6 +1,6 @@
 
 import { createClient } from '@supabase/supabase-js';
-import { UserRole, TicketStatus, UserProfile, Ticket, Sale, ActivityLog, Agency, AgencyModules, AgencySettings, AgencyStatus } from '../types';
+import { UserRole, TicketStatus, UserProfile, Ticket, Sale, ActivityLog, Agency, AgencyModules, AgencySettings, AgencyStatus, CreditTransaction } from '../types';
 
 const supabaseUrl = (import.meta as any).env?.VITE_SUPABASE_URL;
 const supabaseKey = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY;
@@ -14,12 +14,15 @@ const DEFAULT_MODULES: AgencyModules = {
   dashboard: true, sales: true, history: true, tickets: true, team: true, tasks: true
 };
 
+// Constantes de crédits
+const TICKET_CREDIT_RATIO = 20; // 1 crédit pour 20 tickets
+const FREE_TICKET_LIMIT = 50;   // 50 premiers tickets gratuits
+
 class SupabaseService {
   public isConfigured() {
     return !!supabaseUrl && !supabaseUrl.includes('placeholder');
   }
 
-  // --- LOGGING ---
   private async log(user: any, action: string, details: string) {
     if (!this.isConfigured()) return;
     try {
@@ -32,6 +35,54 @@ class SupabaseService {
         created_at: new Date().toISOString()
       });
     } catch (e) { console.error("Audit Log error:", e); }
+  }
+
+  // --- GESTION DES CRÉDITS ---
+
+  async getCreditHistory(aid: string): Promise<CreditTransaction[]> {
+    const { data } = await client.from('credit_transactions')
+      .select('*')
+      .eq('agency_id', aid)
+      .order('created_at', { ascending: false });
+    return data || [];
+  }
+
+  async addCredits(aid: string, amount: number, adminUid: string, description: string) {
+    // 1. Mettre à jour le solde de l'agence
+    const { data: agency } = await client.from('agencies').select('credits_balance').eq('id', aid).single();
+    const newBalance = (agency?.credits_balance || 0) + amount;
+    
+    await client.from('agencies').update({ credits_balance: newBalance }).eq('id', aid);
+    
+    // 2. Enregistrer la transaction
+    await client.from('credit_transactions').insert({
+      agency_id: aid,
+      amount: amount,
+      type: 'RECHARGE',
+      description,
+      created_by: adminUid,
+      created_at: new Date().toISOString()
+    });
+
+    this.log({id: adminUid, agency_id: aid}, 'CREDIT_RECHARGE', `Recharge de ${amount} crédits. Nouveau solde: ${newBalance}`);
+  }
+
+  private calculateCreditCost(ticketCount: number, totalTicketsEver: number): number {
+    let cost = 0;
+    let billableTickets = ticketCount;
+
+    // Gestion de la franchise des 50 premiers tickets
+    if (totalTicketsEver < FREE_TICKET_LIMIT) {
+      const remainingFree = FREE_TICKET_LIMIT - totalTicketsEver;
+      billableTickets = Math.max(0, ticketCount - remainingFree);
+    }
+
+    if (billableTickets > 0) {
+      // 1 crédit pour 20 tickets. On arrondit au supérieur pour les crédits consommés.
+      cost = Math.ceil(billableTickets / TICKET_CREDIT_RATIO);
+    }
+
+    return cost;
   }
 
   // --- AUTHENTIFICATION ---
@@ -92,25 +143,27 @@ class SupabaseService {
 
   // --- STATISTIQUES ---
   async getStats(aid: string, role: UserRole) {
-    if (!this.isConfigured()) return { revenue: 0, soldCount: 0, stockCount: 0, agencyCount: 0, userCount: 0, currency: 'GNF' };
+    if (!this.isConfigured()) return { revenue: 0, soldCount: 0, stockCount: 0, agencyCount: 0, userCount: 0, currency: 'GNF', credits: 0 };
     const isSuper = role === UserRole.SUPER_ADMIN;
     
     const [sales, tickets, profiles, agencies] = await Promise.all([
       isSuper ? client.from('sales').select('amount') : client.from('sales').select('amount').eq('agency_id', aid),
       isSuper ? client.from('tickets').select('status') : client.from('tickets').select('status').eq('agency_id', aid),
       isSuper ? client.from('profiles').select('id') : client.from('profiles').select('id').eq('agency_id', aid),
-      isSuper ? client.from('agencies').select('settings') : client.from('agencies').select('settings').eq('id', aid).single()
+      isSuper ? client.from('agencies').select('*') : client.from('agencies').select('*').eq('id', aid).single()
     ]);
 
-    let archRev = 0, archCount = 0;
+    let archRev = 0, archCount = 0, totalCredits = 0;
     if (isSuper) {
       (agencies.data as any[] || []).forEach(a => { 
         archRev += (Number(a.settings?.archived_revenue) || 0); 
         archCount += (Number(a.settings?.archived_sales_count) || 0); 
+        totalCredits += (Number(a.credits_balance) || 0);
       });
     } else {
       archRev = Number((agencies.data as any)?.settings?.archived_revenue) || 0;
       archCount = Number((agencies.data as any)?.settings?.archived_sales_count) || 0;
+      totalCredits = Number((agencies.data as any)?.credits_balance) || 0;
     }
 
     return {
@@ -119,7 +172,8 @@ class SupabaseService {
       stockCount: (tickets.data || []).filter(t => t.status === TicketStatus.UNSOLD).length,
       userCount: (profiles.data || []).length,
       agencyCount: isSuper ? (agencies.data as any[] || []).length : 1,
-      currency: (isSuper ? 'GNF' : (agencies.data as any)?.settings?.currency) || 'GNF'
+      currency: (isSuper ? 'GNF' : (agencies.data as any)?.settings?.currency) || 'GNF',
+      credits: totalCredits
     };
   }
 
@@ -132,14 +186,36 @@ class SupabaseService {
   }
 
   async importTickets(ts: any[], uid: string, aid: string) {
-    if (!this.isConfigured()) return { success: 0, errors: ts.length, skipped: 0 };
-    const validTickets = ts.filter(t => t.username && String(t.username).trim().length > 0);
-    if (validTickets.length === 0) return { success: 0, errors: 0, skipped: 0 };
+    if (!this.isConfigured()) return { success: 0, errors: ts.length, skipped: 0, error: 'Non configuré' };
     
+    // 1. Vérifier l'agence et les crédits
+    const { data: agency } = await client.from('agencies').select('*').eq('id', aid).single();
+    if (!agency) return { success: 0, errors: 0, skipped: 0, error: 'Agence introuvable' };
+
+    const validTickets = ts.filter(t => t.username && String(t.username).trim().length > 0);
     const { data: existing } = await client.from('tickets').select('username').eq('agency_id', aid);
     const existingSet = new Set(existing?.map(e => e.username) || []);
     
-    const toInsert = validTickets.filter(t => !existingSet.has(String(t.username).trim())).map(t => ({
+    const toInsertRaw = validTickets.filter(t => !existingSet.has(String(t.username).trim()));
+    const skipped = validTickets.length - toInsertRaw.length;
+
+    if (toInsertRaw.length === 0) return { success: 0, errors: 0, skipped };
+
+    // 2. Calculer le coût en crédits
+    const totalEver = agency.settings?.total_tickets_ever || 0;
+    const creditCost = this.calculateCreditCost(toInsertRaw.length, totalEver);
+
+    if (agency.credits_balance < creditCost && agency.status !== 'inactive') {
+      return { 
+        success: 0, 
+        errors: 0, 
+        skipped, 
+        error: `Crédits insuffisants. Coût estimé : ${creditCost} crédits. Solde actuel : ${agency.credits_balance}` 
+      };
+    }
+
+    // 3. Procéder à l'insertion
+    const toInsert = toInsertRaw.map(t => ({
       username: String(t.username).trim(),
       password: String(t.password || t.username).trim(),
       profile: String(t.profile || 'Default').trim(),
@@ -151,12 +227,39 @@ class SupabaseService {
       created_at: new Date().toISOString()
     }));
 
-    const skipped = validTickets.length - toInsert.length;
-    if (toInsert.length > 0) {
-      const { error } = await client.from('tickets').insert(toInsert);
-      if (!error) this.log({id: uid, agency_id: aid}, 'TICKET_IMPORT', `Import de ${toInsert.length} tickets.`);
+    const { error: insertError } = await client.from('tickets').insert(toInsert);
+    if (insertError) return { success: 0, errors: toInsert.length, skipped, error: insertError.message };
+
+    // 4. Déduire les crédits et mettre à jour les compteurs
+    if (creditCost > 0) {
+      await client.from('agencies').update({ 
+        credits_balance: agency.credits_balance - creditCost,
+        settings: {
+          ...(agency.settings || {}),
+          total_tickets_ever: totalEver + toInsert.length
+        }
+      }).eq('id', aid);
+
+      await client.from('credit_transactions').insert({
+        agency_id: aid,
+        amount: -creditCost,
+        type: 'CONSUMPTION',
+        description: `Import de ${toInsert.length} tickets`,
+        created_by: uid,
+        created_at: new Date().toISOString()
+      });
+    } else {
+      // Juste mettre à jour le compteur global si c'est gratuit
+      await client.from('agencies').update({ 
+        settings: {
+          ...(agency.settings || {}),
+          total_tickets_ever: totalEver + toInsert.length
+        }
+      }).eq('id', aid);
     }
-    return { success: toInsert.length, errors: 0, skipped };
+
+    this.log({id: uid, agency_id: aid}, 'TICKET_IMPORT', `Import de ${toInsert.length} tickets. Coût: ${creditCost} crédits.`);
+    return { success: toInsert.length, errors: 0, skipped, cost: creditCost };
   }
 
   async sellTicket(tid: string, sid: string, aid: string, phone?: string) {
@@ -201,7 +304,14 @@ class SupabaseService {
     return (await client.from('agencies').insert({ 
       name, 
       status: 'active', 
-      settings: { currency: 'GNF', archived_revenue: 0, archived_sales_count: 0, modules: DEFAULT_MODULES } 
+      credits_balance: 10, // 10 crédits offerts à la création
+      settings: { 
+        currency: 'GNF', 
+        archived_revenue: 0, 
+        archived_sales_count: 0, 
+        modules: DEFAULT_MODULES,
+        total_tickets_ever: 0
+      } 
     }).select().single()).data as Agency; 
   }
 

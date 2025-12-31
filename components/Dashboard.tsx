@@ -1,12 +1,12 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
-import { TrendingUp, ShoppingBag, Database, Users, Building2, ChevronRight, CheckCircle, AlertCircle, RefreshCcw } from 'lucide-react';
+import { TrendingUp, ShoppingBag, Database, Users, Building2, ChevronRight, CheckCircle, AlertCircle, RefreshCcw, Coins } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import { UserProfile, UserRole } from '../types';
 import { translations, Language } from '../i18n';
 
 const Dashboard: React.FC<{ user: UserProfile, lang: Language, onNavigate: (t: string) => void, notify: any }> = ({ user, lang, onNavigate, notify }) => {
-  const [stats, setStats] = useState({ revenue: 0, soldCount: 0, stockCount: 0, agencyCount: 0, userCount: 0, currency: 'GNF' });
+  const [stats, setStats] = useState({ revenue: 0, soldCount: 0, stockCount: 0, agencyCount: 0, userCount: 0, currency: 'GNF', credits: 0 });
   const [isSyncing, setIsSyncing] = useState(false);
   const t = translations[lang];
 
@@ -64,7 +64,7 @@ const Dashboard: React.FC<{ user: UserProfile, lang: Language, onNavigate: (t: s
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard title={t.revenue} val={`${stats.revenue.toLocaleString()} ${stats.currency}`} icon={<TrendingUp/>} color="bg-green-500" trend="+12%" />
-        <StatCard title={t.ticketsSold} val={stats.soldCount} icon={<ShoppingBag/>} color="bg-blue-500" trend={`${stats.soldCount > 0 ? '+5%' : '0'}`} />
+        <StatCard title="Solde Crédits" val={stats.credits} icon={<Coins/>} color="bg-primary-600" trend={stats.credits < 5 ? "Faible" : undefined} />
         <StatCard title={user.role === UserRole.SUPER_ADMIN ? t.activeAgencies : t.stockRemaining} val={user.role === UserRole.SUPER_ADMIN ? stats.agencyCount : stats.stockCount} icon={user.role === UserRole.SUPER_ADMIN ? <Building2/> : <Database/>} color="bg-amber-500" />
         <StatCard title={t.activeUsers} val={stats.userCount} icon={<Users/>} color="bg-indigo-500" />
       </div>
@@ -88,19 +88,22 @@ const Dashboard: React.FC<{ user: UserProfile, lang: Language, onNavigate: (t: s
                 <TrendingUp size={160} />
             </div>
             <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.3em] opacity-60 mb-1">Capacité de vente</p>
-                <h4 className="text-3xl font-black leading-tight">Performances Unifiées</h4>
+                <p className="text-[10px] font-black uppercase tracking-[0.3em] opacity-60 mb-1">Système Crédits</p>
+                <h4 className="text-3xl font-black leading-tight">Consommation</h4>
             </div>
             <div className="mt-8 space-y-6">
                 <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold opacity-80 uppercase tracking-widest">Stock Global</span>
-                    <span className="text-xl font-black">{stats.stockCount}</span>
+                    <span className="text-xs font-bold opacity-80 uppercase tracking-widest">Solde Disponible</span>
+                    <span className="text-xl font-black">{stats.credits} Crédits</span>
                 </div>
                 <div className="w-full bg-white/20 h-2 rounded-full overflow-hidden">
-                    <div className="bg-white h-full transition-all duration-1000" style={{ width: `${Math.min(100, (stats.stockCount / 1000) * 100)}%` }}></div>
+                    <div className="bg-white h-full transition-all duration-1000" style={{ width: `${Math.min(100, (stats.credits / 100) * 100)}%` }}></div>
                 </div>
-                <button onClick={() => onNavigate('tickets')} className="w-full py-4 bg-white text-primary-600 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg active:scale-95 transition-all">
-                    Approvisionner
+                <div className="text-[9px] font-black uppercase opacity-60">
+                   Rappel : 1 crédit permet d'importer 20 tickets.
+                </div>
+                <button onClick={() => onNavigate('settings')} className="w-full py-4 bg-white text-primary-600 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg active:scale-95 transition-all">
+                    Historique Crédits
                 </button>
             </div>
         </div>
@@ -116,7 +119,7 @@ const StatCard = ({ title, val, icon, color, trend }: any) => (
             {React.cloneElement(icon, { size: 28, strokeWidth: 2.5 })}
         </div>
         {trend && (
-            <span className="text-[10px] font-black text-green-500 bg-green-50 dark:bg-green-900/20 px-2 py-1 rounded-lg">
+            <span className={`text-[10px] font-black px-2 py-1 rounded-lg ${trend === 'Faible' ? 'bg-red-50 text-red-500' : 'bg-green-50 text-green-500'}`}>
                 {trend}
             </span>
         )}
