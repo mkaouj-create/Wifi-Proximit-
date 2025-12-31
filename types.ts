@@ -13,6 +13,7 @@ export enum TicketStatus {
 }
 
 export type AgencyStatus = 'active' | 'inactive';
+export type SubscriptionStatus = 'active' | 'expired' | 'trial';
 
 export interface AgencyModules {
   dashboard: boolean;
@@ -67,7 +68,7 @@ export interface Sale {
 export interface CreditTransaction {
   id: string;
   agency_id: string;
-  amount: number; // Positif pour recharge, négatif pour consommation
+  amount: number; 
   type: 'RECHARGE' | 'CONSUMPTION' | 'REFUND';
   description: string;
   created_at: string;
@@ -82,7 +83,7 @@ export interface AgencySettings {
   archived_revenue?: number;
   archived_sales_count?: number;
   last_cleanup_at?: string;
-  total_tickets_ever?: number; // Pour gérer la franchise des 50 premiers tickets
+  total_tickets_ever?: number;
 }
 
 export interface Agency {
@@ -92,10 +93,13 @@ export interface Agency {
   owner_id?: string;
   credits_balance: number;
   settings?: AgencySettings;
+  // Nouveaux champs d'abonnement
+  plan_name: string;
+  subscription_start: string;
+  subscription_end: string;
   created_at: string;
 }
 
-// Fixed: Added ActivityLog interface to resolve import errors in SupabaseService and TaskManager
 export interface ActivityLog {
   id: string;
   user_id: string;
