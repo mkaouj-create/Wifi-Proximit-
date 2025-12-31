@@ -58,16 +58,19 @@ const SalesTerminal: React.FC<SalesTerminalProps> = ({ user, lang, notify }) => 
     try {
       if (navigator.clipboard && window.isSecureContext) {
         await navigator.clipboard.writeText(text);
-        notify('success', 'Code copié dans le presse-papier');
+        notify('success', 'Code copié avec succès');
       } else {
-        // Fallback pour anciens navigateurs ou contextes non sécurisés
         const textArea = document.createElement("textarea");
         textArea.value = text;
+        textArea.style.position = "fixed";
+        textArea.style.left = "-9999px";
+        textArea.style.top = "0";
         document.body.appendChild(textArea);
+        textArea.focus();
         textArea.select();
         document.execCommand('copy');
         document.body.removeChild(textArea);
-        notify('success', 'Code copié');
+        notify('success', 'Code copié (fallback)');
       }
     } catch (err) {
       notify('error', 'Échec de la copie');
@@ -80,23 +83,25 @@ const SalesTerminal: React.FC<SalesTerminalProps> = ({ user, lang, notify }) => 
     
     let url = "";
     if (!phone) {
-        // Partage WhatsApp ouvert (sans numéro spécifique)
+        // Lien direct sans numéro spécifique
         url = `https://wa.me/?text=${encodedMessage}`;
     } else {
+        // Nettoyage et formatage du numéro
         let cleanPhone = phone.replace(/\D/g, '').replace(/^0+/, '');
-        // Formatage pour la Guinée par défaut si 9 chiffres
+        // Default indicatif Guinée si format local 9 chiffres
         if (cleanPhone.length === 9 && currency === 'GNF') {
             cleanPhone = '224' + cleanPhone;
         }
         url = `https://wa.me/${cleanPhone}?text=${encodedMessage}`;
     }
     
-    // Tentative d'ouverture
+    // Tentative d'ouverture directe
     const win = window.open(url, '_blank', 'noopener,noreferrer');
+    
+    // Si l'ouverture échoue (bloqué par popup ou WebView restrictif), on copie au presse-papier
     if (!win) {
-      // Fallback si popup bloquée ou environnement restrictif
       handleCopy();
-      notify('info', 'Lien copié car WhatsApp n\'a pu s\'ouvrir');
+      notify('info', "Lien copié car WhatsApp n'a pu s'ouvrir");
     }
   };
 
@@ -113,14 +118,14 @@ const SalesTerminal: React.FC<SalesTerminalProps> = ({ user, lang, notify }) => 
       if (result) {
         setSoldTicketInfo(ticketToSell);
         setShowReceipt(true);
-        notify('success', 'Vente effectuée !');
+        notify('success', 'Transaction validée !');
         const updatedTickets = await supabase.getTickets(user.agency_id, user.role);
         setAvailableTickets(updatedTickets.filter(t => t.status === TicketStatus.UNSOLD));
       } else {
         notify('error', 'Ticket non disponible.');
       }
     } catch (err) {
-      notify('error', "Échec de la transaction.");
+      notify('error', "Échec de la vente.");
     } finally {
       setIsSelling(false);
     }
@@ -143,7 +148,7 @@ const SalesTerminal: React.FC<SalesTerminalProps> = ({ user, lang, notify }) => 
             </div>
             
             <div className="animate-in slide-in-from-bottom-4 duration-500 delay-100">
-              <h2 className="text-xl md:text-2xl font-black text-gray-900 dark:text-white leading-tight uppercase tracking-tight">{t.saleSuccess}</h2>
+              <h2 className="text-xl md:text-2xl font-black text-gray-900 dark:text-white uppercase tracking-tight leading-tight">{t.saleSuccess}</h2>
               <p className="text-gray-400 font-black uppercase tracking-widest text-[9px] md:text-[10px] mt-1">
                 {soldTicketInfo.profile} • {soldTicketInfo.price.toLocaleString()} {currency}
               </p>
