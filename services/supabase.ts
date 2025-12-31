@@ -78,6 +78,13 @@ class SupabaseService {
     await this.log(actor, 'PLAN_UPDATE', `Plan ${plan.name} mis à jour`);
   }
 
+  async deleteSubscriptionPlan(id: string, actor: UserProfile): Promise<void> {
+    if (actor.role !== UserRole.SUPER_ADMIN) throw new Error("Accès refusé");
+    const { error } = await client.from('subscription_plans').delete().eq('id', id);
+    if (error) throw error;
+    await this.log(actor, 'PLAN_DELETE', `Plan ID ${id} supprimé`);
+  }
+
   // --- ABONNEMENT ---
   public isSubscriptionActive(agency: Agency): boolean {
     if (!agency || !agency.subscription_end) return false;
@@ -231,6 +238,26 @@ class SupabaseService {
     const { data } = await client.from('agencies').select('*').eq('id', id).single(); 
     return data as Agency;
   }
+
+  async createAgency(name: string, actor: UserProfile): Promise<Agency> {
+    if (actor.role !== UserRole.SUPER_ADMIN) throw new Error("Accès refusé");
+    const { data, error } = await client.from('agencies').insert({
+      name,
+      status: 'active',
+      credits_balance: 50, // Cadeau de bienvenue
+      plan_name: 'Trial',
+      subscription_start: new Date().toISOString(),
+      subscription_end: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+      settings: {
+        currency: 'GNF',
+        modules: { dashboard: true, sales: true, history: true, tickets: true, team: true, tasks: true }
+      }
+    }).select().single();
+    if (error) throw error;
+    await this.log(actor, 'AGENCY_CREATE', `Agence ${name} créée`);
+    return data as Agency;
+  }
+
   async getTickets(aid: string, role: UserRole): Promise<Ticket[]> {
     let q = client.from('tickets').select('*').order('created_at', { ascending: false });
     if (role !== UserRole.SUPER_ADMIN) q = q.eq('agency_id', aid);

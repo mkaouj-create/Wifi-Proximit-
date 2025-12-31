@@ -31,6 +31,9 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang, notify }) => 
   const [isProcessing, setIsProcessing] = useState(false);
   const [search, setSearch] = useState('');
   
+  // New Agency Form
+  const [newAgencyName, setNewAgencyName] = useState('');
+
   // States for Plan Editor
   const [editingPlan, setEditingPlan] = useState<Partial<SubscriptionPlan> | null>(null);
 
@@ -90,6 +93,23 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang, notify }) => 
     }
   };
 
+  const handleCreateAgency = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newAgencyName || isProcessing) return;
+    setIsProcessing(true);
+    try {
+      await supabase.createAgency(newAgencyName, user);
+      notify('success', `Agence "${newAgencyName}" créée.`);
+      setShowAdd(false);
+      setNewAgencyName('');
+      await loadAgencies();
+    } catch (e) {
+      notify('error', "Erreur lors de la création de l'agence.");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const handleSavePlan = async () => {
     if (!editingPlan || isProcessing) return;
     setIsProcessing(true);
@@ -102,6 +122,20 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang, notify }) => 
         notify('error', "Erreur lors de la sauvegarde du forfait.");
     } finally {
         setIsProcessing(false);
+    }
+  };
+
+  const handleDeletePlan = async (id: string) => {
+    if (!confirm("Supprimer ce forfait définitivement ?") || isProcessing) return;
+    setIsProcessing(true);
+    try {
+      await supabase.deleteSubscriptionPlan(id, user);
+      notify('info', "Forfait supprimé.");
+      loadPlans();
+    } catch (e) {
+      notify('error', "Échec de la suppression.");
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -266,6 +300,42 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang, notify }) => 
         })}
       </div>
 
+      {/* MODALE AJOUT AGENCE */}
+      {showAdd && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-300">
+          <div className="bg-white dark:bg-gray-800 w-full max-w-sm rounded-[3rem] p-10 shadow-2xl animate-in zoom-in duration-300 border dark:border-gray-700">
+            <div className="text-center mb-8">
+              <div className="w-16 h-16 bg-primary-50 dark:bg-primary-900/20 text-primary-600 rounded-3xl flex items-center justify-center mx-auto mb-4">
+                <Building2 size={32} />
+              </div>
+              <h3 className="text-2xl font-black dark:text-white tracking-tight">Nouvelle Agence</h3>
+              <p className="text-xs text-gray-400 font-bold uppercase tracking-widest">Expansion du réseau</p>
+            </div>
+            <form onSubmit={handleCreateAgency} className="space-y-6">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Nom de l'agence</label>
+                <input 
+                  type="text" 
+                  autoFocus
+                  className="w-full p-5 bg-gray-50 dark:bg-gray-900 border-2 border-transparent focus:border-primary-500 rounded-2xl font-bold dark:text-white"
+                  value={newAgencyName}
+                  onChange={(e) => setNewAgencyName(e.target.value)}
+                  placeholder="Ex: WiFi Pro Conakry"
+                  required
+                />
+              </div>
+              <div className="flex gap-4">
+                <button type="button" onClick={() => setShowAdd(false)} className="flex-1 py-5 bg-gray-100 dark:bg-gray-700 rounded-2xl font-black text-xs uppercase tracking-widest">Annuler</button>
+                <button type="submit" disabled={isProcessing} className="flex-1 py-5 bg-primary-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-primary-500/30 flex items-center justify-center gap-2">
+                  {isProcessing ? <Loader2 className="animate-spin w-4 h-4" /> : <Save size={16} />}
+                  Créer
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* MODALE EDITEUR DE PLANS (SUPER ADMIN) */}
       {showPlansEditor && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-300">
@@ -286,7 +356,10 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang, notify }) => 
                                 <p className="font-black text-lg dark:text-white">{plan.name}</p>
                                 <p className="text-xs text-indigo-600 font-bold">{plan.price.toLocaleString()} {plan.currency} / {plan.months} Mois</p>
                             </div>
-                            <button onClick={() => setEditingPlan(plan)} className="p-3 bg-white dark:bg-gray-800 rounded-xl text-gray-400 group-hover:text-primary-500 transition-all border dark:border-gray-700 shadow-sm"><Edit3 size={18} /></button>
+                            <div className="flex gap-2">
+                                <button onClick={() => setEditingPlan(plan)} className="p-3 bg-white dark:bg-gray-800 rounded-xl text-gray-400 group-hover:text-primary-500 transition-all border dark:border-gray-700 shadow-sm"><Edit3 size={18} /></button>
+                                <button onClick={() => handleDeletePlan(plan.id)} className="p-3 bg-white dark:bg-gray-800 rounded-xl text-gray-400 group-hover:text-red-500 transition-all border dark:border-gray-700 shadow-sm"><Trash2 size={18} /></button>
+                            </div>
                         </div>
                     ))}
                     <button onClick={() => setEditingPlan({ name: '', price: 0, months: 1, currency: 'GNF', features: [], order_index: plans.length })} className="p-6 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-[2rem] flex items-center justify-center gap-3 text-gray-400 hover:border-primary-500 hover:text-primary-500 transition-all">
@@ -296,39 +369,41 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang, notify }) => 
              </div>
 
              {editingPlan && (
-                <div className="absolute inset-0 z-10 bg-white dark:bg-gray-800 p-10 animate-in slide-in-from-right duration-300">
+                <div className="absolute inset-0 z-10 bg-white dark:bg-gray-800 p-10 animate-in slide-in-from-right duration-300 flex flex-col">
                     <div className="flex items-center gap-4 mb-8">
                         <button onClick={() => setEditingPlan(null)} className="p-2 bg-gray-100 dark:bg-gray-700 rounded-xl"><X size={20} /></button>
-                        <h4 className="text-xl font-black uppercase">Éditer Forfait</h4>
+                        <h4 className="text-xl font-black uppercase dark:text-white">Éditer Forfait</h4>
                     </div>
                     
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="space-y-2">
-                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Nom du Plan</label>
-                            <input type="text" className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-xl font-bold border-none" value={editingPlan.name} onChange={e => setEditingPlan({...editingPlan, name: e.target.value})} />
-                        </div>
-                        <div className="space-y-2">
-                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Durée (Mois)</label>
-                            <input type="number" className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-xl font-bold border-none" value={editingPlan.months} onChange={e => setEditingPlan({...editingPlan, months: parseInt(e.target.value)})} />
-                        </div>
-                        <div className="space-y-2">
-                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Tarif</label>
-                            <input type="number" className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-xl font-bold border-none" value={editingPlan.price} onChange={e => setEditingPlan({...editingPlan, price: parseInt(e.target.value)})} />
-                        </div>
-                        <div className="space-y-2">
-                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Devise</label>
-                            <input type="text" className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-xl font-bold border-none" value={editingPlan.currency} onChange={e => setEditingPlan({...editingPlan, currency: e.target.value})} />
-                        </div>
-                        <div className="md:col-span-2 space-y-2">
-                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Points Forts (Séparés par une virgule)</label>
-                            <textarea className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-xl font-bold border-none" rows={3} value={editingPlan.features?.join(', ')} onChange={e => setEditingPlan({...editingPlan, features: e.target.value.split(',').map(f => f.trim())})} />
-                        </div>
+                    <div className="flex-1 overflow-y-auto no-scrollbar pr-2">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div className="space-y-2">
+                              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Nom du Plan</label>
+                              <input type="text" className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-xl font-bold dark:text-white border-none" value={editingPlan.name} onChange={e => setEditingPlan({...editingPlan, name: e.target.value})} />
+                          </div>
+                          <div className="space-y-2">
+                              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Durée (Mois)</label>
+                              <input type="number" className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-xl font-bold dark:text-white border-none" value={editingPlan.months} onChange={e => setEditingPlan({...editingPlan, months: parseInt(e.target.value)})} />
+                          </div>
+                          <div className="space-y-2">
+                              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Tarif</label>
+                              <input type="number" className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-xl font-bold dark:text-white border-none" value={editingPlan.price} onChange={e => setEditingPlan({...editingPlan, price: parseInt(e.target.value)})} />
+                          </div>
+                          <div className="space-y-2">
+                              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Devise</label>
+                              <input type="text" className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-xl font-bold dark:text-white border-none" value={editingPlan.currency} onChange={e => setEditingPlan({...editingPlan, currency: e.target.value})} />
+                          </div>
+                          <div className="md:col-span-2 space-y-2">
+                              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Points Forts (Séparés par une virgule)</label>
+                              <textarea className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-xl font-bold dark:text-white border-none" rows={3} value={editingPlan.features?.join(', ')} onChange={e => setEditingPlan({...editingPlan, features: e.target.value.split(',').map(f => f.trim())})} />
+                          </div>
+                      </div>
                     </div>
 
-                    <div className="mt-10 flex gap-4">
-                        <button onClick={() => setEditingPlan(null)} className="flex-1 py-5 bg-gray-100 dark:bg-gray-700 rounded-2xl font-black uppercase text-xs">Annuler</button>
-                        <button onClick={handleSavePlan} className="flex-1 py-5 bg-primary-600 text-white rounded-2xl font-black uppercase text-xs flex items-center justify-center gap-3">
-                            {isProcessing ? <Loader2 className="animate-spin" /> : <Save size={18} />}
+                    <div className="mt-10 flex gap-4 shrink-0">
+                        <button onClick={() => setEditingPlan(null)} className="flex-1 py-5 bg-gray-100 dark:bg-gray-700 rounded-2xl font-black uppercase text-xs dark:text-white">Annuler</button>
+                        <button onClick={handleSavePlan} className="flex-1 py-5 bg-primary-600 text-white rounded-2xl font-black uppercase text-xs flex items-center justify-center gap-3 shadow-lg shadow-primary-500/30">
+                            {isProcessing ? <Loader2 className="animate-spin w-4 h-4" /> : <Save size={18} />}
                             Sauvegarder
                         </button>
                     </div>
@@ -410,7 +485,7 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang, notify }) => 
       {/* Modale Abonnement - Dynamisée */}
       {agencyToSubscribe && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xl animate-in fade-in duration-300">
-          <div className="bg-white dark:bg-gray-800 w-full max-w-lg rounded-[3rem] p-10 shadow-2xl animate-in zoom-in duration-300">
+          <div className="bg-white dark:bg-gray-800 w-full max-w-lg rounded-[3rem] p-10 shadow-2xl animate-in zoom-in duration-300 border dark:border-gray-700">
              <div className="text-center mb-8">
                 <div className="w-16 h-16 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 rounded-3xl flex items-center justify-center mx-auto mb-4">
                     <Star size={32} />
@@ -447,7 +522,7 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang, notify }) => 
       {/* Modale Modules */}
       {agencyToManage && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xl animate-in fade-in duration-300">
-          <div className="bg-white dark:bg-gray-800 w-full max-w-xl rounded-[3rem] p-10 shadow-2xl animate-in zoom-in duration-300 border border-white/5">
+          <div className="bg-white dark:bg-gray-800 w-full max-w-xl rounded-[3rem] p-10 shadow-2xl animate-in zoom-in duration-300 border dark:border-gray-700">
             <div className="flex items-center justify-between mb-8">
                 <div className="flex items-center gap-4">
                     <div className="w-12 h-12 bg-primary-50 dark:bg-primary-900/20 text-primary-600 rounded-2xl flex items-center justify-center"><Building2 className="w-6 h-6" /></div>
