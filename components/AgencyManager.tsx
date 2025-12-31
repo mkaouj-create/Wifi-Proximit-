@@ -1,10 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
-import { Building2, Plus, Edit3, Trash2, X, Search, AlertTriangle, Loader2, ShieldCheck, Coins, ToggleLeft, ToggleRight, Info, Power, PowerOff, Save, Calendar, Star, FileText, CheckCircle2 } from 'lucide-react';
+import { Building2, Plus, Edit3, X, Search, Loader2, ShieldCheck, Coins, ToggleLeft, ToggleRight, Power, PowerOff, Save, Calendar, Star, FileText } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import { Agency, UserProfile, AgencyStatus, AgencyModules } from '../types';
 import { translations, Language } from '../i18n';
-import { Tooltip } from '../App';
 
 interface AgencyManagerProps {
   user: UserProfile;
@@ -53,8 +52,12 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang, notify }) => 
   }, [agencyToManage]);
 
   const loadAgencies = async () => {
-    const data = await supabase.getAgencies();
-    setAgencies(data);
+    try {
+      const data = await supabase.getAgencies();
+      setAgencies(data);
+    } catch (e) {
+      notify('error', "Erreur de chargement des agences.");
+    }
   };
 
   const handleUpdateModules = async () => {
@@ -76,22 +79,22 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang, notify }) => 
     e.preventDefault();
     if (!agencyToRecharge || isProcessing) return;
     
-    const amount = parseInt(rechargeAmount);
+    const amount = Number(rechargeAmount);
     if (isNaN(amount) || amount <= 0) {
-      notify('error', "Montant invalide.");
+      notify('error', "Veuillez sélectionner un volume valide.");
       return;
     }
 
     setIsProcessing(true);
     try {
       await supabase.addCredits(agencyToRecharge.id, amount, user.id, rechargeDesc);
-      notify('success', `${amount} crédits ajoutés à ${agencyToRecharge.name}.`);
+      notify('success', `${amount} crédits ajoutés avec succès.`);
       setAgencyToRecharge(null);
       setRechargeAmount('10');
       setRechargeDesc('Recharge manuelle');
       await loadAgencies();
     } catch (e: any) {
-      notify('error', "Échec de la recharge : vérifiez votre connexion ou vos droits.");
+      notify('error', "Échec du rechargement. Vérifiez les permissions.");
       console.error(e);
     } finally {
       setIsProcessing(false);
@@ -103,7 +106,7 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang, notify }) => 
     setIsProcessing(true);
     try {
         await supabase.updateSubscription(agencyToSubscribe.id, plan.name, plan.months, user);
-        notify('success', `Abonnement ${plan.name} activé pour ${agencyToSubscribe.name}`);
+        notify('success', `Abonnement ${plan.name} activé.`);
         setAgencyToSubscribe(null);
         await loadAgencies();
     } catch (e) {
@@ -118,12 +121,14 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang, notify }) => 
   };
 
   const handleToggleStatus = async (agency: Agency) => {
+    if (isProcessing) return;
     const newStatus: AgencyStatus = agency.status === 'active' ? 'inactive' : 'active';
-    if (!confirm(`Voulez-vous vraiment changer l'état d'accès ?`)) return;
+    if (!confirm(`Changer le statut de l'agence ${agency.name} ?`)) return;
+    
     setIsProcessing(true);
     try {
       await supabase.setAgencyStatus(agency.id, newStatus, user);
-      notify('info', `Statut de ${agency.name} mis à jour.`);
+      notify('info', `Statut mis à jour.`);
       await loadAgencies();
     } catch (e) {
       notify('error', "Action impossible.");
@@ -136,21 +141,30 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang, notify }) => 
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 pb-24">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
-          <h2 className="text-3xl font-black text-gray-900 dark:text-white leading-none tracking-tight">Gestion des Partenaires</h2>
-          <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest mt-2">Pilotage SaaS & Licences</p>
+          <h2 className="text-3xl font-black text-gray-900 dark:text-white leading-none tracking-tight">Gestion des Agences</h2>
+          <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest mt-2">SaaS & Licences Partenaires</p>
         </div>
-        <button onClick={() => setShowAdd(true)} className="flex items-center gap-3 bg-primary-600 text-white px-6 py-4 rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl shadow-primary-500/30 active:scale-95 transition-all">
-          <Plus className="w-5 h-5" /> Nouveau Compte
+        <button onClick={() => setShowAdd(true)} className="flex items-center justify-center gap-3 bg-primary-600 text-white px-6 py-4 rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl shadow-primary-500/30 active:scale-95 transition-all">
+          <Plus className="w-5 h-5" /> Ajouter Agence
         </button>
       </div>
 
+      {/* Search */}
       <div className="relative">
         <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-        <input type="text" placeholder="Rechercher par nom d'agence..." className="w-full pl-14 pr-6 py-5 bg-white dark:bg-gray-800 border-none rounded-[1.5rem] shadow-sm focus:ring-4 focus:ring-primary-500/10 font-bold dark:text-white" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <input 
+          type="text" 
+          placeholder="Rechercher par nom..." 
+          className="w-full pl-14 pr-6 py-5 bg-white dark:bg-gray-800 border-none rounded-[1.5rem] shadow-sm focus:ring-4 focus:ring-primary-500/10 font-bold dark:text-white outline-none" 
+          value={search} 
+          onChange={(e) => setSearch(e.target.value)} 
+        />
       </div>
 
+      {/* Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filtered.map(agency => {
           const isActive = agency.status === 'active';
@@ -180,7 +194,7 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang, notify }) => 
                             <Coins size={16} className="text-amber-500" />
                             <span className="text-[10px] text-gray-400 font-black uppercase tracking-widest">Crédits</span>
                         </div>
-                        <p className="font-black text-lg dark:text-white">{agency.credits_balance}</p>
+                        <p className="font-black text-lg dark:text-white tabular-nums">{agency.credits_balance}</p>
                     </div>
 
                     <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-900/50 rounded-2xl">
@@ -188,8 +202,8 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang, notify }) => 
                             <Calendar size={16} className="text-blue-500" />
                             <span className="text-[10px] text-gray-400 font-black uppercase tracking-widest">Échéance</span>
                         </div>
-                        <p className={`font-black text-xs ${isExpired ? 'text-red-500' : 'dark:text-white'}`}>
-                            {agency.subscription_end ? new Date(agency.subscription_end).toLocaleDateString() : 'N/A'}
+                        <p className={`font-black text-xs tabular-nums ${isExpired ? 'text-red-500' : 'dark:text-white'}`}>
+                            {agency.subscription_end ? new Date(agency.subscription_end).toLocaleDateString() : 'Trial'}
                         </p>
                     </div>
                 </div>
@@ -205,7 +219,7 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang, notify }) => 
                 <button onClick={() => setAgencyToManage(agency)} className="flex items-center justify-center gap-2 py-3.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-gray-200 transition-all active:scale-95">
                     <Edit3 className="w-3.5 h-3.5" /> Modules
                 </button>
-                <button onClick={() => handleToggleStatus(agency)} className={`flex items-center justify-center gap-2 py-3.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all active:scale-95 ${isActive ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-green-50 text-green-600 hover:bg-green-100'}`}>
+                <button disabled={isProcessing} onClick={() => handleToggleStatus(agency)} className={`flex items-center justify-center gap-2 py-3.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all active:scale-95 ${isActive ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-green-50 text-green-600 hover:bg-green-100'}`}>
                     {isActive ? <PowerOff className="w-3.5 h-3.5" /> : <Power className="w-3.5 h-3.5" />} {isActive ? 'Bloquer' : 'Activer'}
                 </button>
               </div>
@@ -214,21 +228,21 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang, notify }) => 
         })}
       </div>
 
-      {/* MODALE RECHARGE CRÉDITS (Refonte selon capture) */}
+      {/* MODALE RECHARGE CRÉDITS (Refonte selon capture d'écran) */}
       {agencyToRecharge && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-300">
-          <div className="bg-[#1a2332] dark:bg-[#1a2332] w-full max-w-sm rounded-[3rem] p-10 shadow-2xl animate-in zoom-in duration-300 border border-white/5 relative">
+          <div className="bg-[#1a2332] w-full max-w-sm rounded-[3rem] p-10 shadow-2xl animate-in zoom-in duration-300 border border-white/5 relative">
              <div className="text-center mb-10">
                 <div className="w-20 h-20 bg-[#2d3748] text-orange-500 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-inner ring-1 ring-white/10">
                     <Coins size={40} />
                 </div>
-                <h3 className="text-3xl font-black text-white tracking-tight mb-1">Vente de Crédits</h3>
-                <p className="text-xs text-gray-400 font-bold uppercase tracking-widest opacity-60">{agencyToRecharge.name}</p>
+                <h3 className="text-3xl font-black text-white tracking-tight mb-1 leading-none">Vente de Crédits</h3>
+                <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest opacity-60 mt-3">{agencyToRecharge.name}</p>
              </div>
 
              <form onSubmit={handleRecharge} className="space-y-8">
                 <div className="space-y-3">
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Volume de Crédits</label>
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 opacity-70">Volume de Crédits</label>
                     <div className="relative">
                         <select 
                             className="w-full p-6 bg-[#0f172a] text-white rounded-2xl outline-none font-black text-xl appearance-none border border-white/5 focus:border-orange-500/50 transition-all cursor-pointer" 
@@ -248,7 +262,7 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang, notify }) => 
                 </div>
 
                 <div className="space-y-3">
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Note de transaction</label>
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 opacity-70">Note de transaction</label>
                     <div className="relative">
                         <input 
                             type="text" 
@@ -283,7 +297,7 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang, notify }) => 
         </div>
       )}
 
-      {/* MODALE GESTION ABONNEMENT */}
+      {/* Modale Abonnement */}
       {agencyToSubscribe && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xl animate-in fade-in duration-300">
           <div className="bg-white dark:bg-gray-800 w-full max-w-lg rounded-[3rem] p-10 shadow-2xl animate-in zoom-in duration-300">
@@ -299,8 +313,9 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang, notify }) => 
                 {PLAN_OPTIONS.map(plan => (
                     <button 
                         key={plan.name}
+                        disabled={isProcessing}
                         onClick={() => handleActivateSubscription(plan)}
-                        className="w-full p-6 bg-gray-50 dark:bg-gray-900 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 border-2 border-transparent hover:border-indigo-500 rounded-[1.5rem] flex items-center justify-between transition-all group"
+                        className="w-full p-6 bg-gray-50 dark:bg-gray-900 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 border-2 border-transparent hover:border-indigo-500 rounded-[1.5rem] flex items-center justify-between transition-all group disabled:opacity-50"
                     >
                         <div className="text-left">
                             <p className="font-black dark:text-white">{plan.name}</p>
@@ -314,12 +329,12 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang, notify }) => 
                 ))}
              </div>
 
-             <button onClick={() => setAgencyToSubscribe(null)} className="w-full py-5 bg-gray-100 dark:bg-gray-700 text-gray-500 rounded-2xl font-black text-xs uppercase tracking-widest">Annuler</button>
+             <button onClick={() => setAgencyToSubscribe(null)} className="w-full py-5 bg-gray-100 dark:bg-gray-700 text-gray-500 rounded-2xl font-black text-xs uppercase tracking-widest active:scale-95 transition-all">Annuler</button>
           </div>
         </div>
       )}
 
-      {/* MODALE GESTION MODULES */}
+      {/* Modale Modules */}
       {agencyToManage && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xl animate-in fade-in duration-300">
           <div className="bg-white dark:bg-gray-800 w-full max-w-xl rounded-[3rem] p-10 shadow-2xl animate-in zoom-in duration-300 border border-white/5">
@@ -344,7 +359,7 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang, notify }) => 
                     })}
                 </div>
             </div>
-            <div className="flex gap-4"><button onClick={() => setAgencyToManage(null)} className="flex-1 py-5 bg-gray-100 dark:bg-gray-700 rounded-2xl font-black text-xs uppercase tracking-widest">Fermer</button><button disabled={isProcessing} onClick={handleUpdateModules} className="flex-1 py-5 bg-primary-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-primary-500/30 active:scale-95 disabled:opacity-50 transition-all flex items-center justify-center gap-3">{isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <ShieldCheck className="w-5 h-5" />} Appliquer</button></div>
+            <div className="flex gap-4"><button onClick={() => setAgencyToManage(null)} className="flex-1 py-5 bg-gray-100 dark:bg-gray-700 rounded-2xl font-black text-xs uppercase tracking-widest active:scale-95 transition-all">Fermer</button><button disabled={isProcessing} onClick={handleUpdateModules} className="flex-1 py-5 bg-primary-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-primary-500/30 active:scale-95 disabled:opacity-50 transition-all flex items-center justify-center gap-3">{isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <ShieldCheck className="w-5 h-5" />} Appliquer</button></div>
           </div>
         </div>
       )}
