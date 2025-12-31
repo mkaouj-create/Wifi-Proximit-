@@ -4,8 +4,8 @@ import { ShoppingCart, Phone, CheckCircle2, Share2, AlertCircle, Sparkles, Loade
 import { supabase } from '../services/supabase';
 import { Ticket, UserProfile, TicketStatus, Agency } from '../types';
 import { translations, Language } from '../i18n';
-import { Tooltip } from '../App';
 
+// Fix: Removed missing export Tooltip from App
 interface SalesTerminalProps {
   user: UserProfile;
   lang: Language;

@@ -4,8 +4,8 @@ import { Search, FileUp, X, Edit2, Trash2, Loader2, Tags, Layers, AlertTriangle,
 import { supabase } from '../services/supabase';
 import { Ticket, UserProfile, TicketStatus, UserRole, Agency } from '../types';
 import { translations, Language } from '../i18n';
-import { Tooltip } from '../App';
 
+// Fix: Removed missing export Tooltip from App
 const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type: 'success' | 'error' | 'info', message: string) => void }> = ({ user, lang, notify }) => {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [agencies, setAgencies] = useState<Agency[]>([]);

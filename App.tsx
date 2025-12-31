@@ -4,8 +4,8 @@ import {
   LayoutDashboard, ShoppingBag, Database, Users, Lock, Sun, Moon, 
   History, Settings, Building2, Eye, EyeOff, 
   KeyRound, Loader2, ClipboardList, Power, ShieldAlert, 
-  CheckCircle, Info, XCircle, X, ExternalLink, ArrowLeft,
-  CalendarDays, AlertTriangle
+  CheckCircle, Info, XCircle, X, ArrowLeft,
+  CalendarDays, Smartphone
 } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import TicketManager from './components/TicketManager';
@@ -20,18 +20,6 @@ import { supabase } from './services/supabase';
 import { UserProfile, UserRole, Agency } from './types';
 import { translations, Language } from './i18n';
 
-export const Tooltip: React.FC<{ text: string, children: React.ReactNode }> = ({ text, children }) => (
-  <div className="group relative flex items-center">
-    {children}
-    <div className="invisible lg:group-hover:visible opacity-0 lg:group-hover:opacity-100 absolute bottom-full left-1/2 -translate-x-1/2 mb-3 px-3 py-2 bg-gray-900 dark:bg-black text-white text-[10px] font-black uppercase tracking-widest rounded-xl shadow-2xl whitespace-nowrap z-[100] transition-all duration-300 pointer-events-none border border-white/10">
-      {text}
-      <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-gray-900 dark:border-t-black"></div>
-    </div>
-  </div>
-);
-
-type AppViewState = 'LANDING' | 'LOGIN' | 'LOCKED' | 'SUSPENDED' | 'EXPIRED' | 'DASHBOARD';
-
 const App: React.FC = () => {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [currentAgency, setCurrentAgency] = useState<Agency | null>(null);
@@ -39,6 +27,7 @@ const App: React.FC = () => {
   const [showLogin, setShowLogin] = useState(false);
   const [pinLocked, setPinLocked] = useState(false);
   const [pin, setPin] = useState('');
+  const [isAppLoading, setIsAppLoading] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [loginEmail, setLoginEmail] = useState('');
@@ -54,22 +43,24 @@ const App: React.FC = () => {
     localStorage.setItem('theme', darkMode ? 'dark' : 'light');
   }, [darkMode]);
 
+  // Session auto-check
   useEffect(() => {
-    if (notification) {
-      const timer = setTimeout(() => setNotification(null), 4000);
-      return () => clearTimeout(timer);
-    }
-  }, [notification]);
+    const checkSession = async () => {
+      const profile = await supabase.checkPersistedSession();
+      if (profile) {
+        setUser(profile);
+        setPinLocked(true);
+      }
+      setIsAppLoading(false);
+    };
+    checkSession();
+  }, []);
 
   useEffect(() => {
     if (user?.agency_id) {
       const fetchAgency = async () => {
-        try {
-          const data = await supabase.getAgency(user.agency_id);
-          setCurrentAgency(data);
-        } catch (error) {
-          notify('error', "Impossible de charger les données de l'agence.");
-        }
+        const data = await supabase.getAgency(user.agency_id);
+        setCurrentAgency(data);
       };
       fetchAgency();
     }
@@ -77,210 +68,123 @@ const App: React.FC = () => {
 
   const notify = useCallback((type: 'success' | 'error' | 'info', message: string) => {
     setNotification({ type, message });
+    setTimeout(() => setNotification(null), 4000);
   }, []);
 
-  const currentView: AppViewState = useMemo(() => {
+  const currentView = useMemo(() => {
     if (!user) return showLogin ? 'LOGIN' : 'LANDING';
     if (pinLocked) return 'LOCKED';
     if (currentAgency?.status === 'inactive') return 'SUSPENDED';
-    
     if (user.role !== UserRole.SUPER_ADMIN && currentAgency && !supabase.isSubscriptionActive(currentAgency)) {
         return 'EXPIRED';
     }
-    
     return 'DASHBOARD';
   }, [user, showLogin, pinLocked, currentAgency]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!loginEmail || !loginPassword) return;
     setIsLoading(true);
-    try {
-      const profile = await supabase.signIn(loginEmail, loginPassword);
-      if (profile) {
-        setUser(profile);
-        setPinLocked(true);
-        setLoginPassword('');
-        notify('success', `Bienvenue, ${profile.display_name}`);
-      } else {
-        notify('error', t.loginError || "Identifiants incorrects");
-      }
-    } catch (err) {
-      notify('error', "Erreur de connexion.");
-    } finally {
-      setIsLoading(false);
+    const profile = await supabase.signIn(loginEmail, loginPassword);
+    if (profile) {
+      setUser(profile);
+      setPinLocked(true);
+      setLoginPassword('');
+      notify('success', `Bienvenue, ${profile.display_name}`);
+    } else {
+      notify('error', "Identifiants invalides.");
     }
+    setIsLoading(false);
   };
 
-  const handleLogout = useCallback(async () => {
+  const handleLogout = async () => {
     if (user) await supabase.signOut(user);
     setUser(null);
     setCurrentAgency(null);
     setPinLocked(false);
     setPin('');
     setShowLogin(false);
-    notify('info', 'Déconnecté.');
-  }, [user, notify]);
+    notify('info', 'Session fermée.');
+  };
 
-  const handlePinSubmit = useCallback(async (digit: string) => {
+  const handlePinSubmit = async (digit: string) => {
     if (pin.length < 4) {
       const newPin = pin + digit;
       setPin(newPin);
-      if (newPin.length === 4 && user) {
+      if (newPin.length === 4) {
         setIsLoading(true);
-        try {
-          const isValid = await supabase.verifyPin(user.id, newPin);
-          if (isValid) { setPinLocked(false); setPin(''); notify('success', 'Déverrouillé'); }
-          else { notify('error', t.pinError || 'PIN incorrect'); setPin(''); }
-        } catch (error) {
-          notify('error', 'Erreur.');
+        const isValid = await supabase.verifyPin(user!.id, newPin);
+        if (isValid) {
+          setPinLocked(false);
           setPin('');
-        } finally {
-          setIsLoading(false);
+          notify('success', 'Accès autorisé');
+        } else {
+          notify('error', 'PIN invalide');
+          setPin('');
         }
+        setIsLoading(false);
       }
     }
-  }, [pin, user, t.pinError, notify]);
+  };
 
-  const canAccess = useCallback((module: string) => {
+  const canAccess = (module: string) => {
     if (user?.role === UserRole.SUPER_ADMIN) return true;
-    if (currentAgency?.status === 'inactive') return false;
     const modules = currentAgency?.settings?.modules;
-    if (!modules) return true;
-    return (modules as any)[module] !== false;
-  }, [user, currentAgency]);
+    return !modules || (modules as any)[module] !== false;
+  };
 
-  const renderLogin = () => (
-    <div className="min-h-screen bg-primary-600 dark:bg-gray-950 flex items-center justify-center p-6 transition-all font-inter">
-      <div className="bg-white dark:bg-gray-900 w-full max-w-md rounded-[2.5rem] md:rounded-[3rem] p-8 md:p-10 shadow-2xl space-y-8 animate-in zoom-in duration-500 relative">
-        <button onClick={() => setShowLogin(false)} className="absolute top-6 left-6 md:top-8 md:left-8 p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-gray-500"><ArrowLeft size={24} /></button>
-        <div className="text-center space-y-4 pt-4">
-          <div className="w-16 h-16 md:w-20 md:h-20 bg-primary-50 dark:bg-primary-900/30 text-primary-600 rounded-2xl md:rounded-[2rem] flex items-center justify-center mx-auto shadow-inner ring-1 ring-primary-100"><Lock className="w-8 h-8 md:w-10 md:h-10" /></div>
-          <h1 className="text-xl md:text-2xl font-black dark:text-white uppercase tracking-tighter">{t.appName}</h1>
-          <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest leading-none">Accès Professionnel Unifié</p>
+  if (isAppLoading) {
+    return (
+      <div className="min-h-screen bg-white dark:bg-gray-950 flex flex-col items-center justify-center space-y-6">
+        <div className="w-16 h-16 bg-primary-600 rounded-3xl animate-bounce flex items-center justify-center text-white font-black text-2xl shadow-2xl">W</div>
+        <div className="flex items-center gap-2 text-primary-600 font-black text-xs uppercase tracking-widest animate-pulse">
+          <Loader2 className="animate-spin" size={16} /> Chargement...
         </div>
-        <form onSubmit={handleLogin} className="space-y-4 md:space-y-5">
-          <div className="space-y-1">
-            <input 
-              type="email" 
-              placeholder={t.emailAddress} 
-              className="w-full p-4 md:p-5 bg-gray-50 dark:bg-gray-800 rounded-2xl outline-none font-bold dark:text-white border border-transparent focus:border-primary-500/50 transition-all text-sm md:text-base" 
-              value={loginEmail} 
-              onChange={e => setLoginEmail(e.target.value)} 
-              required 
-            />
-          </div>
-          <div className="relative">
-            <input 
-              type={showPassword ? "text" : "password"} 
-              placeholder={t.password} 
-              className="w-full p-4 md:p-5 bg-gray-50 dark:bg-gray-800 rounded-2xl outline-none font-bold dark:text-white border border-transparent focus:border-primary-500/50 transition-all text-sm md:text-base" 
-              value={loginPassword} 
-              onChange={e => setLoginPassword(e.target.value)} 
-              required 
-            />
-            <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-primary-500 transition-colors">
-              {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-            </button>
-          </div>
-          <button disabled={isLoading} className="w-full py-4 md:py-5 bg-primary-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-primary-500/30 active:scale-95 transition-all flex justify-center items-center gap-3 disabled:opacity-70 text-sm md:text-base">
-            {isLoading ? <Loader2 className="animate-spin" /> : t.confirm}
-          </button>
-        </form>
       </div>
-    </div>
-  );
-
-  const renderLockScreen = () => (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex flex-col items-center justify-center p-6 md:p-8 space-y-6 md:space-y-10 animate-in fade-in duration-500 font-inter">
-      <div className="text-center space-y-2">
-        <KeyRound className="w-10 h-10 md:w-12 md:h-12 text-primary-600 mx-auto mb-4" />
-        <h2 className="text-xl md:text-2xl font-black dark:text-white uppercase tracking-tight">{t.secureAccess}</h2>
-        <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest">{user?.display_name}</p>
-      </div>
-      <div className="flex gap-3 md:gap-4">
-        {[0,1,2,3].map(i => (
-          <div key={i} className={`w-3 h-3 md:w-4 md:h-4 rounded-full border-2 border-primary-600 transition-all duration-300 ${pin.length > i ? 'bg-primary-600 scale-125 shadow-[0_0_15px_rgba(2,132,199,0.5)]' : ''}`} />
-        ))}
-      </div>
-      <div className="grid grid-cols-3 gap-4 md:gap-6 relative max-w-[320px] w-full">
-        {isLoading && (
-          <div className="absolute inset-0 z-10 bg-gray-50/50 dark:bg-gray-950/50 backdrop-blur-[1px] flex items-center justify-center">
-            <Loader2 className="w-10 h-10 animate-spin text-primary-600" />
-          </div>
-        )}
-        {[1,2,3,4,5,6,7,8,9,'C',0,'DEL'].map(val => (
-          <button 
-            key={val} 
-            disabled={isLoading} 
-            onClick={() => { if (val === 'C') setPin(''); else if (val === 'DEL') setPin(pin.slice(0,-1)); else handlePinSubmit(val.toString()); }} 
-            className="aspect-square bg-white dark:bg-gray-900 rounded-full font-black text-lg md:text-xl shadow-sm border border-gray-100 dark:border-gray-800 active:bg-primary-600 active:text-white active:scale-90 transition-all flex items-center justify-center dark:text-white hover:border-primary-500"
-          >
-            {val}
-          </button>
-        ))}
-      </div>
-      <button onClick={handleLogout} className="text-gray-400 font-bold uppercase tracking-widest text-[10px] md:text-xs hover:text-red-500 transition-colors">{t.logout}</button>
-    </div>
-  );
+    );
+  }
 
   const renderDashboard = () => (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 transition-colors relative font-inter flex flex-col lg:flex-row">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex flex-col lg:flex-row transition-colors duration-500">
       {/* HEADER MOBILE */}
-      <header className="sticky top-0 z-40 bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl border-b dark:border-gray-800 p-4 flex justify-between lg:hidden items-center safe-top">
-        <button onClick={handleLogout} className="p-2.5 bg-red-50 dark:bg-red-900/20 text-red-500 rounded-xl active:scale-90 transition-all">
-          <Power size={20}/>
-        </button>
+      <header className="lg:hidden sticky top-0 z-40 bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border-b dark:border-gray-800 p-4 flex justify-between items-center safe-top">
+        <button onClick={handleLogout} className="p-3 bg-red-50 dark:bg-red-900/20 text-red-500 rounded-2xl active:scale-90 transition-all"><Power size={22}/></button>
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-primary-600 rounded-lg flex items-center justify-center text-white font-black">W</div>
-          <span className="font-black text-sm dark:text-white uppercase tracking-tighter">Wifi Pro</span>
+          <div className="w-8 h-8 bg-primary-600 rounded-xl flex items-center justify-center text-white font-black text-sm shadow-lg shadow-primary-500/20">W</div>
+          <span className="font-black dark:text-white uppercase tracking-tighter text-sm">Wifi Pro</span>
         </div>
-        <button onClick={() => setPinLocked(true)} className="p-2.5 bg-gray-100 dark:bg-gray-800 rounded-xl text-gray-500 active:scale-90 transition-all">
-          <Lock size={20}/>
-        </button>
+        <button onClick={() => setPinLocked(true)} className="p-3 bg-gray-100 dark:bg-gray-800 text-gray-400 rounded-2xl active:scale-90 transition-all"><Lock size={22}/></button>
       </header>
 
       {/* SIDEBAR DESKTOP */}
-      <aside className="hidden lg:flex fixed left-0 top-0 bottom-0 w-[280px] bg-white dark:bg-gray-900 border-r dark:border-gray-800 flex-col p-8 overflow-y-auto no-scrollbar z-50">
-        <div className="flex items-center gap-4 mb-12">
-          <div className="w-12 h-12 bg-primary-600 rounded-2xl flex items-center justify-center text-white font-black text-2xl shadow-xl shadow-primary-500/20">W</div>
+      <aside className="hidden lg:flex fixed left-0 top-0 bottom-0 w-[300px] bg-white dark:bg-gray-900 border-r dark:border-gray-800 flex-col p-8 z-50">
+        <div className="flex items-center gap-4 mb-14">
+          <div className="w-14 h-14 bg-primary-600 rounded-[1.5rem] flex items-center justify-center text-white font-black text-2xl shadow-2xl shadow-primary-500/20">W</div>
           <div>
-            <h1 className="text-xl font-black dark:text-white leading-none tracking-tighter">Wifi <span className="text-primary-600">Pro</span></h1>
-            <p className="text-[8px] text-gray-400 font-black uppercase tracking-[0.3em] mt-1">Management</p>
+            <h1 className="text-xl font-black dark:text-white leading-none tracking-tight">Wifi <span className="text-primary-600">Pro</span></h1>
+            <p className="text-[10px] text-gray-400 font-black uppercase tracking-[0.3em] mt-1">SaaS Mobile</p>
           </div>
         </div>
-        <nav className="space-y-1.5 flex-1">
+        <nav className="space-y-2 flex-1 overflow-y-auto no-scrollbar">
           <NavItem icon={<LayoutDashboard/>} label={t.dashboard} active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
           {canAccess('sales') && <NavItem icon={<ShoppingBag/>} label={t.terminal} active={activeTab === 'sales'} onClick={() => setActiveTab('sales')} />}
           {canAccess('history') && <NavItem icon={<History/>} label={t.history} active={activeTab === 'history'} onClick={() => setActiveTab('history')} />}
           {canAccess('tickets') && <NavItem icon={<Database/>} label={t.tickets} active={activeTab === 'tickets'} onClick={() => setActiveTab('tickets')} />}
-          {canAccess('tasks') && <NavItem icon={<ClipboardList/>} label={t.tasks} active={activeTab === 'tasks'} onClick={() => setActiveTab('tasks')} />}
           
-          <div className="pt-8 pb-2">
-            <p className="text-[10px] font-black text-gray-400 uppercase ml-4 tracking-[0.2em] opacity-60">Administration</p>
-          </div>
+          <div className="pt-10 pb-4 ml-4"><p className="text-[10px] font-black text-gray-400 uppercase tracking-widest opacity-50">Gestion</p></div>
           
           {user!.role === UserRole.SUPER_ADMIN && <NavItem icon={<Building2/>} label={t.agencies} active={activeTab === 'agencies'} onClick={() => setActiveTab('agencies')} />}
           {user!.role !== UserRole.SELLER && <NavItem icon={<Users/>} label={t.users} active={activeTab === 'users'} onClick={() => setActiveTab('users')} />}
           {user!.role !== UserRole.SELLER && <NavItem icon={<Settings/>} label={t.settings} active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />}
         </nav>
-        
-        <div className="mt-8 flex gap-3 pt-6 border-t dark:border-gray-800">
-          <button onClick={() => setDarkMode(!darkMode)} className="flex-1 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-2xl flex justify-center text-gray-500 hover:text-primary-500 transition-colors">
-            {darkMode ? <Sun size={20}/> : <Moon size={20}/>}
-          </button>
-          <button onClick={() => setPinLocked(true)} className="flex-1 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-2xl flex justify-center text-gray-500 hover:text-primary-500 transition-colors">
-            <Lock size={20}/>
-          </button>
-          <button onClick={handleLogout} className="flex-1 p-4 bg-red-50 dark:bg-red-900/10 rounded-2xl flex justify-center text-red-400 hover:text-red-600 transition-colors">
-            <Power size={20}/>
-          </button>
+        <div className="mt-8 pt-8 border-t dark:border-gray-800 flex gap-4">
+          <button onClick={() => setDarkMode(!darkMode)} className="p-4 bg-gray-50 dark:bg-gray-800 rounded-2xl text-gray-500 hover:text-primary-600 transition-all flex-1 flex justify-center">{darkMode ? <Sun size={20}/> : <Moon size={20}/>}</button>
+          <button onClick={handleLogout} className="p-4 bg-red-50 dark:bg-red-900/20 text-red-500 rounded-2xl flex-1 flex justify-center hover:bg-red-100 transition-all"><Power size={20}/></button>
         </div>
       </aside>
 
-      {/* MAIN CONTENT */}
-      <main className="flex-1 lg:ml-[280px] p-4 md:p-8 lg:p-14 max-w-full overflow-x-hidden min-h-screen pb-28 lg:pb-14 relative z-0">
-        <div className="max-w-7xl mx-auto page-transition">
+      {/* MAIN */}
+      <main className="flex-1 lg:ml-[300px] p-4 md:p-10 lg:p-16 pb-32 lg:pb-16 max-w-full overflow-x-hidden min-h-screen relative">
+        <div className="max-w-7xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
           {activeTab === 'dashboard' && <Dashboard user={user!} lang={lang} onNavigate={setActiveTab} notify={notify} />}
           {activeTab === 'sales' && <SalesTerminal user={user!} lang={lang} notify={notify} />}
           {activeTab === 'history' && <SalesHistory user={user!} lang={lang} />}
@@ -292,8 +196,8 @@ const App: React.FC = () => {
         </div>
       </main>
 
-      {/* BOTTOM NAVIGATION MOBILE */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-gray-950/95 backdrop-blur-2xl border-t dark:border-gray-800 flex justify-around items-center px-2 py-3 lg:hidden z-50 safe-bottom shadow-[0_-10px_40px_rgba(0,0,0,0.1)] rounded-t-[2rem]">
+      {/* BOTTOM NAV MOBILE */}
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-gray-950/90 backdrop-blur-2xl border-t dark:border-gray-800 flex justify-around items-center px-4 py-4 safe-bottom z-50 rounded-t-[2.5rem] shadow-[0_-20px_60px_rgba(0,0,0,0.1)]">
         <MobNavItem icon={<LayoutDashboard/>} label={t.dashboard} active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
         {canAccess('sales') && <MobNavItem icon={<ShoppingBag/>} label={t.terminal} active={activeTab === 'sales'} onClick={() => setActiveTab('sales')} />}
         {canAccess('tickets') && <MobNavItem icon={<Database/>} label={t.tickets} active={activeTab === 'tickets'} onClick={() => setActiveTab('tickets')} />}
@@ -304,62 +208,108 @@ const App: React.FC = () => {
   );
 
   return (
-    <>
+    <div className="font-inter">
       {notification && (
-        <div className="fixed top-4 md:top-6 right-4 md:right-6 left-4 md:left-auto z-[200] animate-in slide-in-from-top md:slide-in-from-right duration-500 font-inter">
-          <div className={`flex items-center gap-4 px-6 py-4 rounded-[1.5rem] shadow-2xl border backdrop-blur-xl ${notification.type === 'success' ? 'bg-green-600/95 border-green-400 text-white' : notification.type === 'error' ? 'bg-red-600/95 border-red-400 text-white' : 'bg-blue-600/95 border-blue-400 text-white'}`}>
-            {notification.type === 'success' && <CheckCircle size={20} />}
-            {notification.type === 'error' && <XCircle size={20} />}
-            {notification.type === 'info' && <Info size={20} />}
-            <span className="text-[11px] font-black uppercase tracking-tight flex-1">{notification.message}</span>
-            <button onClick={() => setNotification(null)} className="p-1 hover:opacity-50 transition-opacity"><X size={16}/></button>
+        <div className="fixed top-6 left-6 right-6 lg:left-auto lg:right-10 z-[100] animate-in slide-in-from-top lg:slide-in-from-right duration-500">
+          <div className={`flex items-center gap-4 px-6 py-4 rounded-3xl shadow-2xl border backdrop-blur-xl ${notification.type === 'success' ? 'bg-green-600/95 border-green-400 text-white' : notification.type === 'error' ? 'bg-red-600/95 border-red-400 text-white' : 'bg-blue-600/95 border-blue-400 text-white'}`}>
+            <span className="text-xs font-black uppercase tracking-widest flex-1">{notification.message}</span>
+            <button onClick={() => setNotification(null)} className="p-1 hover:opacity-50 transition-opacity"><X size={18}/></button>
           </div>
         </div>
       )}
-      
       {currentView === 'LANDING' && <LandingPage onLoginClick={() => setShowLogin(true)} />}
-      {currentView === 'LOGIN' && renderLogin()}
-      {currentView === 'LOCKED' && renderLockScreen()}
+      {currentView === 'LOGIN' && (
+        <div className="min-h-screen bg-primary-600 dark:bg-gray-950 flex items-center justify-center p-6 transition-all">
+          <div className="bg-white dark:bg-gray-900 w-full max-w-md rounded-[3rem] p-10 shadow-2xl space-y-10 animate-in zoom-in duration-500 relative">
+            <button onClick={() => setShowLogin(false)} className="absolute top-8 left-8 p-3 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-2xl text-gray-500 transition-all"><ArrowLeft size={24} /></button>
+            <div className="text-center pt-8 space-y-4">
+              <div className="w-20 h-20 bg-primary-50 dark:bg-primary-900/30 text-primary-600 rounded-[2rem] flex items-center justify-center mx-auto shadow-inner"><Lock size={32} /></div>
+              <h1 className="text-3xl font-black dark:text-white uppercase tracking-tighter">Wifi <span className="text-primary-600">Pro</span></h1>
+              <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest">Console d'accès SaaS</p>
+            </div>
+            <form onSubmit={handleLogin} className="space-y-5">
+              <input type="email" placeholder={t.emailAddress} className="w-full p-6 bg-gray-50 dark:bg-gray-800 rounded-3xl outline-none font-bold dark:text-white border-2 border-transparent focus:border-primary-500 transition-all" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} required />
+              <div className="relative">
+                <input type={showPassword ? "text" : "password"} placeholder={t.password} className="w-full p-6 bg-gray-50 dark:bg-gray-800 rounded-3xl outline-none font-bold dark:text-white border-2 border-transparent focus:border-primary-500 transition-all" value={loginPassword} onChange={e => setLoginPassword(e.target.value)} required />
+                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-6 top-1/2 -translate-y-1/2 text-gray-400">{showPassword ? <EyeOff size={22} /> : <Eye size={22} />}</button>
+              </div>
+              <button disabled={isLoading} className="w-full py-6 bg-primary-600 text-white rounded-3xl font-black uppercase tracking-[0.2em] shadow-2xl shadow-primary-500/30 active:scale-[0.98] transition-all flex justify-center items-center gap-4 disabled:opacity-50">
+                {isLoading ? <Loader2 className="animate-spin" /> : t.confirm}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+      {currentView === 'LOCKED' && (
+        <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex flex-col items-center justify-center p-8 space-y-10 animate-in fade-in duration-500">
+          <div className="text-center space-y-4">
+            <div className="w-20 h-20 bg-primary-100 dark:bg-primary-900/30 text-primary-600 rounded-[2rem] flex items-center justify-center mx-auto shadow-xl"><KeyRound size={32} /></div>
+            <h2 className="text-3xl font-black dark:text-white uppercase tracking-tight">{t.secureAccess}</h2>
+            <p className="text-[10px] text-gray-400 font-black uppercase tracking-[0.3em]">{user?.display_name}</p>
+          </div>
+          <div className="flex gap-4">
+            {[0,1,2,3].map(i => (
+              <div key={i} className={`w-4 h-4 rounded-full border-2 border-primary-600 transition-all duration-300 ${pin.length > i ? 'bg-primary-600 scale-150 shadow-[0_0_20px_rgba(2,132,199,0.5)]' : ''}`} />
+            ))}
+          </div>
+          <div className="grid grid-cols-3 gap-6 max-w-[320px] w-full">
+            {[1,2,3,4,5,6,7,8,9,'C',0,'<'].map(val => (
+              <button 
+                key={val} 
+                onClick={() => {
+                  if (val === 'C') setPin('');
+                  else if (val === '<') setPin(pin.slice(0,-1));
+                  else handlePinSubmit(val.toString());
+                }} 
+                className="aspect-square bg-white dark:bg-gray-900 rounded-full font-black text-2xl shadow-xl border dark:border-gray-800 active:bg-primary-600 active:text-white active:scale-90 transition-all flex items-center justify-center dark:text-white"
+              >
+                {val}
+              </button>
+            ))}
+          </div>
+          <button onClick={handleLogout} className="text-gray-400 font-black uppercase tracking-widest text-xs hover:text-red-500 transition-colors">Déconnexion</button>
+        </div>
+      )}
       {currentView === 'SUSPENDED' && (
-        <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex flex-col items-center justify-center text-center p-6 space-y-8 font-inter">
-          <div className="w-24 h-24 md:w-32 md:h-32 bg-red-100 dark:bg-red-900/30 text-red-600 rounded-[2.5rem] flex items-center justify-center shadow-2xl animate-pulse"><ShieldAlert className="w-12 h-12 md:w-16 md:h-16" /></div>
-          <div className="space-y-3 max-w-lg">
-            <h2 className="text-2xl md:text-4xl font-black text-gray-900 dark:text-white tracking-tight leading-none uppercase">Compte Suspendu</h2>
-            <p className="text-sm md:text-base text-gray-500 dark:text-gray-400 font-medium">Contactez l'administrateur pour rétablir vos accès.</p>
-            <div className="pt-6 flex flex-col gap-3"><button onClick={handleLogout} className="px-8 py-4 bg-primary-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl">Déconnexion</button></div>
+        <div className="min-h-screen bg-red-50 dark:bg-gray-950 flex flex-col items-center justify-center p-8 text-center space-y-8 animate-in zoom-in duration-700">
+          <div className="w-32 h-32 bg-white dark:bg-gray-900 rounded-[3rem] shadow-2xl flex items-center justify-center text-red-500 animate-pulse"><ShieldAlert size={64} /></div>
+          <div className="space-y-4 max-w-md">
+            <h2 className="text-4xl font-black uppercase tracking-tight">Accès Suspendu</h2>
+            <p className="text-gray-500 font-medium leading-relaxed">Cette agence a été temporairement désactivée par un administrateur système.</p>
+            <button onClick={handleLogout} className="w-full py-5 bg-red-500 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl">Déconnexion</button>
           </div>
         </div>
       )}
       {currentView === 'EXPIRED' && (
-        <div className="min-h-screen bg-white dark:bg-gray-950 flex flex-col items-center justify-center text-center p-6 space-y-10 font-inter">
-          <div className="w-24 h-24 md:w-32 md:h-32 bg-amber-50 dark:bg-amber-900/20 text-amber-600 rounded-[2.5rem] flex items-center justify-center shadow-2xl"><CalendarDays className="w-12 h-12 md:w-16 md:h-16" /></div>
+        <div className="min-h-screen bg-amber-50 dark:bg-gray-950 flex flex-col items-center justify-center p-8 text-center space-y-8 animate-in zoom-in duration-700">
+          <div className="w-32 h-32 bg-white dark:bg-gray-900 rounded-[3rem] shadow-2xl flex items-center justify-center text-amber-500"><CalendarDays size={64} /></div>
           <div className="space-y-4 max-w-md">
-            <h2 className="text-2xl md:text-4xl font-black text-gray-900 dark:text-white tracking-tight leading-none uppercase">Abonnement Expiré</h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">La validité de votre agence est épuisée.</p>
-            <div className="pt-8 flex flex-col gap-4">
-              <button onClick={handleLogout} className="px-8 py-4 bg-gray-100 dark:bg-gray-800 text-gray-500 rounded-2xl font-black text-xs uppercase tracking-widest">Retour</button>
+            <h2 className="text-4xl font-black uppercase tracking-tight">Licence Expirée</h2>
+            <p className="text-gray-500 font-medium leading-relaxed">Votre abonnement a expiré. Contactez un administrateur pour réactiver vos services.</p>
+            <div className="pt-6 flex flex-col gap-4">
+              <button onClick={handleLogout} className="w-full py-5 bg-amber-500 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl">Se déconnecter</button>
             </div>
           </div>
         </div>
       )}
       {currentView === 'DASHBOARD' && renderDashboard()}
-    </>
+    </div>
   );
 };
 
-const NavItem = ({ icon, label, active, onClick }: { icon: React.ReactElement, label: string, active: boolean, onClick: () => void }) => (
-  <button onClick={onClick} className={`flex items-center gap-4 w-full p-4 rounded-2xl font-black text-xs uppercase tracking-[0.1em] transition-all duration-300 ${active ? 'bg-primary-600 text-white shadow-xl shadow-primary-500/20 translate-x-2' : 'text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/40 hover:text-gray-900 dark:hover:text-white'}`}>
-    {React.cloneElement(icon, { size: 18, strokeWidth: active ? 3 : 2 })} 
-    <span className={active ? 'translate-x-1' : ''}>{label}</span>
+const NavItem = ({ icon, label, active, onClick }: any) => (
+  <button onClick={onClick} className={`flex items-center gap-5 w-full p-5 rounded-3xl font-black text-xs uppercase tracking-widest transition-all duration-300 ${active ? 'bg-primary-600 text-white shadow-2xl shadow-primary-500/40 translate-x-3' : 'text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white'}`}>
+    {React.cloneElement(icon, { size: 20, strokeWidth: active ? 3 : 2 })} 
+    <span>{label}</span>
   </button>
 );
 
-const MobNavItem = ({ icon, label, active, onClick }: { icon: React.ReactElement, label: string, active: boolean, onClick: () => void }) => (
-  <button onClick={onClick} className={`flex flex-col items-center justify-center gap-1 flex-1 py-1 transition-all duration-300 relative ${active ? 'text-primary-600' : 'text-gray-400'}`}>
-    <div className={`p-2 rounded-xl transition-all ${active ? 'bg-primary-50 dark:bg-primary-900/30' : ''}`}>
-      {React.cloneElement(icon, { size: 22, strokeWidth: active ? 3 : 2 })}
+const MobNavItem = ({ icon, label, active, onClick }: any) => (
+  <button onClick={onClick} className={`flex flex-col items-center justify-center gap-2 flex-1 transition-all ${active ? 'text-primary-600 scale-110' : 'text-gray-400 opacity-60'}`}>
+    <div className={`p-3 rounded-2xl transition-all ${active ? 'bg-primary-50 dark:bg-primary-900/30 shadow-sm' : ''}`}>
+      {React.cloneElement(icon, { size: 24, strokeWidth: active ? 3 : 2 })}
     </div>
-    <span className={`text-[8px] font-black uppercase tracking-tighter ${active ? 'opacity-100' : 'opacity-60'}`}>{label}</span>
+    <span className="text-[8px] font-black uppercase tracking-tighter">{label}</span>
   </button>
 );
 

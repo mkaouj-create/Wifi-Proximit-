@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Building2, Plus, Edit3, X, Search, Loader2, ShieldCheck, Coins, ToggleLeft, ToggleRight, Power, PowerOff, Save, Calendar, Star, FileText } from 'lucide-react';
+import { Building2, Plus, Edit3, X, Search, Loader2, ShieldCheck, Coins, ToggleLeft, ToggleRight, Power, PowerOff, Save, Calendar, Star, FileText, Clock, AlertTriangle } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import { Agency, UserProfile, AgencyStatus, AgencyModules } from '../types';
 import { translations, Language } from '../i18n';
@@ -58,6 +58,13 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang, notify }) => 
     } catch (e) {
       notify('error', "Erreur de chargement des agences.");
     }
+  };
+
+  const getDaysRemaining = (endDate: string) => {
+    const end = new Date(endDate).getTime();
+    const now = Date.now();
+    const diff = end - now;
+    return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
   };
 
   const handleUpdateModules = async () => {
@@ -169,24 +176,30 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang, notify }) => 
         {filtered.map(agency => {
           const isActive = agency.status === 'active';
           const isExpired = !supabase.isSubscriptionActive(agency);
+          const daysLeft = getDaysRemaining(agency.subscription_end);
+          
           return (
-            <div key={agency.id} className={`bg-white dark:bg-gray-800 rounded-[2.5rem] border p-8 shadow-sm transition-all flex flex-col justify-between group h-full ${!isActive ? 'border-red-100 dark:border-red-900/30 bg-red-50/5' : 'border-gray-100 dark:border-gray-700'}`}>
+            <div key={agency.id} className={`bg-white dark:bg-gray-800 rounded-[2.5rem] border p-8 shadow-sm transition-all flex flex-col justify-between group h-full ${!isActive ? 'border-red-100 dark:border-red-900/30 bg-red-50/5' : isExpired ? 'border-amber-200 dark:border-amber-900/30 bg-amber-50/5' : 'border-gray-100 dark:border-gray-700'}`}>
               <div>
                 <div className="flex items-center justify-between mb-6">
-                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${!isActive ? 'bg-red-100 text-red-600' : 'bg-primary-50 dark:bg-primary-900/20 text-primary-600'}`}>
+                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${!isActive ? 'bg-red-100 text-red-600' : isExpired ? 'bg-amber-100 text-amber-600' : 'bg-primary-50 dark:bg-primary-900/20 text-primary-600'}`}>
                     <Building2 className="w-6 h-6" />
                   </div>
                   <div className="flex flex-col items-end gap-1">
                       <div className={`px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest ${isActive ? 'bg-green-100 text-green-700' : 'bg-gray-500 text-white'}`}>
                         {isActive ? 'ACTIF' : 'SUSPENDU'}
                       </div>
-                      {isExpired && isActive && (
-                          <div className="px-3 py-1 bg-amber-100 text-amber-700 rounded-lg text-[8px] font-black uppercase">Expiré</div>
+                      {isActive && (
+                          <div className={`px-3 py-1 rounded-lg text-[8px] font-black uppercase flex items-center gap-1.5 ${isExpired ? 'bg-red-100 text-red-700' : 'bg-blue-50 dark:bg-blue-900/20 text-blue-600'}`}>
+                             {isExpired ? <AlertTriangle size={10}/> : <Clock size={10}/>}
+                             {isExpired ? 'EXPIRÉ' : `${daysLeft} Jours`}
+                          </div>
                       )}
                   </div>
                 </div>
                 
-                <h3 className="text-xl font-black text-gray-900 dark:text-white mb-4 leading-tight">{agency.name}</h3>
+                <h3 className="text-xl font-black text-gray-900 dark:text-white mb-2 leading-tight">{agency.name}</h3>
+                <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest mb-6">{agency.plan_name}</p>
                 
                 <div className="space-y-4 mb-8">
                     <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-900/50 rounded-2xl">
@@ -203,7 +216,7 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang, notify }) => 
                             <span className="text-[10px] text-gray-400 font-black uppercase tracking-widest">Échéance</span>
                         </div>
                         <p className={`font-black text-xs tabular-nums ${isExpired ? 'text-red-500' : 'dark:text-white'}`}>
-                            {agency.subscription_end ? new Date(agency.subscription_end).toLocaleDateString() : 'Trial'}
+                            {new Date(agency.subscription_end).toLocaleDateString()}
                         </p>
                     </div>
                 </div>
@@ -228,7 +241,7 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang, notify }) => 
         })}
       </div>
 
-      {/* MODALE RECHARGE CRÉDITS (Refonte selon capture d'écran) */}
+      {/* MODALE RECHARGE CRÉDITS */}
       {agencyToRecharge && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-300">
           <div className="bg-[#1a2332] w-full max-w-sm rounded-[3rem] p-10 shadow-2xl animate-in zoom-in duration-300 border border-white/5 relative">
