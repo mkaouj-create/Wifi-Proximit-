@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Building2, Plus, Edit3, Trash2, X, Search, AlertTriangle, Loader2, ShieldCheck, Coins, ToggleLeft, ToggleRight, Info, Power, PowerOff, Save, Calendar, Star } from 'lucide-react';
+import { Building2, Plus, Edit3, Trash2, X, Search, AlertTriangle, Loader2, ShieldCheck, Coins, ToggleLeft, ToggleRight, Info, Power, PowerOff, Save, Calendar, Star, FileText, CheckCircle2 } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import { Agency, UserProfile, AgencyStatus, AgencyModules } from '../types';
 import { translations, Language } from '../i18n';
@@ -33,10 +33,8 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang, notify }) => 
   const [agencyToManage, setAgencyToManage] = useState<Agency | null>(null);
   const [agencyToRecharge, setAgencyToRecharge] = useState<Agency | null>(null);
   const [agencyToSubscribe, setAgencyToSubscribe] = useState<Agency | null>(null);
-  const [agencyToDelete, setAgencyToDelete] = useState<Agency | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [search, setSearch] = useState('');
-  const [newAgencyName, setNewAgencyName] = useState('');
   const [rechargeAmount, setRechargeAmount] = useState('10');
   const [rechargeDesc, setRechargeDesc] = useState('Recharge manuelle');
   const [selectedModules, setSelectedModules] = useState<AgencyModules>({
@@ -68,7 +66,7 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang, notify }) => 
       setAgencyToManage(null);
       await loadAgencies();
     } catch (e: any) {
-      notify('error', e.message || "Erreur.");
+      notify('error', e.message || "Erreur de mise à jour.");
     } finally {
       setIsProcessing(false);
     }
@@ -77,15 +75,24 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang, notify }) => 
   const handleRecharge = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!agencyToRecharge || isProcessing) return;
+    
+    const amount = parseInt(rechargeAmount);
+    if (isNaN(amount) || amount <= 0) {
+      notify('error', "Montant invalide.");
+      return;
+    }
+
     setIsProcessing(true);
     try {
-      await supabase.addCredits(agencyToRecharge.id, parseInt(rechargeAmount), user.id, rechargeDesc);
-      notify('success', `${rechargeAmount} crédits ajoutés.`);
+      await supabase.addCredits(agencyToRecharge.id, amount, user.id, rechargeDesc);
+      notify('success', `${amount} crédits ajoutés à ${agencyToRecharge.name}.`);
       setAgencyToRecharge(null);
       setRechargeAmount('10');
+      setRechargeDesc('Recharge manuelle');
       await loadAgencies();
     } catch (e: any) {
-      notify('error', "Échec recharge");
+      notify('error', "Échec de la recharge : vérifiez votre connexion ou vos droits.");
+      console.error(e);
     } finally {
       setIsProcessing(false);
     }
@@ -100,7 +107,7 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang, notify }) => 
         setAgencyToSubscribe(null);
         await loadAgencies();
     } catch (e) {
-        notify('error', "Erreur activation");
+        notify('error', "Erreur activation d'abonnement.");
     } finally {
         setIsProcessing(false);
     }
@@ -112,12 +119,17 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang, notify }) => 
 
   const handleToggleStatus = async (agency: Agency) => {
     const newStatus: AgencyStatus = agency.status === 'active' ? 'inactive' : 'active';
-    if (!confirm(`Voulez-vous vraiment changer l'état ?`)) return;
+    if (!confirm(`Voulez-vous vraiment changer l'état d'accès ?`)) return;
     setIsProcessing(true);
-    await supabase.setAgencyStatus(agency.id, newStatus, user);
-    notify('info', `Statut mis à jour.`);
-    await loadAgencies();
-    setIsProcessing(false);
+    try {
+      await supabase.setAgencyStatus(agency.id, newStatus, user);
+      notify('info', `Statut de ${agency.name} mis à jour.`);
+      await loadAgencies();
+    } catch (e) {
+      notify('error', "Action impossible.");
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const filtered = agencies.filter(a => a.name.toLowerCase().includes(search.toLowerCase()));
@@ -202,6 +214,75 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang, notify }) => 
         })}
       </div>
 
+      {/* MODALE RECHARGE CRÉDITS (Refonte selon capture) */}
+      {agencyToRecharge && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-300">
+          <div className="bg-[#1a2332] dark:bg-[#1a2332] w-full max-w-sm rounded-[3rem] p-10 shadow-2xl animate-in zoom-in duration-300 border border-white/5 relative">
+             <div className="text-center mb-10">
+                <div className="w-20 h-20 bg-[#2d3748] text-orange-500 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-inner ring-1 ring-white/10">
+                    <Coins size={40} />
+                </div>
+                <h3 className="text-3xl font-black text-white tracking-tight mb-1">Vente de Crédits</h3>
+                <p className="text-xs text-gray-400 font-bold uppercase tracking-widest opacity-60">{agencyToRecharge.name}</p>
+             </div>
+
+             <form onSubmit={handleRecharge} className="space-y-8">
+                <div className="space-y-3">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Volume de Crédits</label>
+                    <div className="relative">
+                        <select 
+                            className="w-full p-6 bg-[#0f172a] text-white rounded-2xl outline-none font-black text-xl appearance-none border border-white/5 focus:border-orange-500/50 transition-all cursor-pointer" 
+                            value={rechargeAmount} 
+                            onChange={(e) => setRechargeAmount(e.target.value)}
+                        >
+                            <option value="10">10 Crédits</option>
+                            <option value="20">20 Crédits</option>
+                            <option value="50">50 Crédits</option>
+                            <option value="100">100 Crédits</option>
+                            <option value="250">250 Crédits</option>
+                        </select>
+                        <div className="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500">
+                            <Plus size={20} />
+                        </div>
+                    </div>
+                </div>
+
+                <div className="space-y-3">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Note de transaction</label>
+                    <div className="relative">
+                        <input 
+                            type="text" 
+                            className="w-full p-5 bg-[#0f172a] text-white rounded-2xl outline-none font-bold text-sm border border-white/5 focus:border-orange-500/50 transition-all" 
+                            value={rechargeDesc} 
+                            onChange={(e) => setRechargeDesc(e.target.value)} 
+                            placeholder="Note..."
+                        />
+                        <FileText className="absolute right-5 top-1/2 -translate-y-1/2 text-gray-600" size={18} />
+                    </div>
+                </div>
+
+                <div className="flex gap-4 pt-4">
+                    <button 
+                        type="button" 
+                        onClick={() => setAgencyToRecharge(null)} 
+                        className="flex-1 py-5 bg-[#2d3748] text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-[#3d485c] transition-all active:scale-95"
+                    >
+                        FERMER
+                    </button>
+                    <button 
+                        disabled={isProcessing} 
+                        type="submit" 
+                        className="flex-1 py-5 bg-orange-500 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-[0_10px_30px_rgba(249,115,22,0.3)] hover:bg-orange-600 active:scale-95 flex items-center justify-center gap-3 transition-all disabled:opacity-50"
+                    >
+                        {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save size={18} />}
+                        CONFIRMER
+                    </button>
+                </div>
+             </form>
+          </div>
+        </div>
+      )}
+
       {/* MODALE GESTION ABONNEMENT */}
       {agencyToSubscribe && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xl animate-in fade-in duration-300">
@@ -264,24 +345,6 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang, notify }) => 
                 </div>
             </div>
             <div className="flex gap-4"><button onClick={() => setAgencyToManage(null)} className="flex-1 py-5 bg-gray-100 dark:bg-gray-700 rounded-2xl font-black text-xs uppercase tracking-widest">Fermer</button><button disabled={isProcessing} onClick={handleUpdateModules} className="flex-1 py-5 bg-primary-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-primary-500/30 active:scale-95 disabled:opacity-50 transition-all flex items-center justify-center gap-3">{isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <ShieldCheck className="w-5 h-5" />} Appliquer</button></div>
-          </div>
-        </div>
-      )}
-
-      {/* MODALE RECHARGE CRÉDITS */}
-      {agencyToRecharge && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xl animate-in fade-in duration-300">
-          <div className="bg-white dark:bg-gray-800 w-full max-w-sm rounded-[3rem] p-10 shadow-2xl animate-in zoom-in duration-300">
-             <div className="text-center mb-8">
-                <div className="w-16 h-16 bg-amber-50 dark:bg-amber-900/20 text-amber-600 rounded-3xl flex items-center justify-center mx-auto mb-4"><Coins size={32} /></div>
-                <h3 className="text-2xl font-black dark:text-white tracking-tight">Vente de Crédits</h3>
-                <p className="text-xs text-gray-400 font-bold uppercase tracking-widest">{agencyToRecharge.name}</p>
-             </div>
-             <form onSubmit={handleRecharge} className="space-y-6">
-                <div className="space-y-2"><label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Volume de Crédits</label><select className="w-full p-5 bg-gray-50 dark:bg-gray-900 rounded-2xl outline-none font-black text-xl" value={rechargeAmount} onChange={(e) => setRechargeAmount(e.target.value)}><option value="10">10 Crédits</option><option value="20">20 Crédits</option><option value="50">50 Crédits</option><option value="100">100 Crédits</option></select></div>
-                <div className="space-y-2"><label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Note de transaction</label><input type="text" className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl outline-none font-medium text-sm" value={rechargeDesc} onChange={(e) => setRechargeDesc(e.target.value)} /></div>
-                <div className="flex gap-4"><button type="button" onClick={() => setAgencyToRecharge(null)} className="flex-1 py-5 bg-gray-100 dark:bg-gray-700 rounded-2xl font-black text-xs uppercase tracking-widest">Fermer</button><button disabled={isProcessing} type="submit" className="flex-1 py-5 bg-amber-500 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-amber-500/30 active:scale-95 flex items-center justify-center gap-2">{isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save size={16} />} Confirmer</button></div>
-             </form>
           </div>
         </div>
       )}
