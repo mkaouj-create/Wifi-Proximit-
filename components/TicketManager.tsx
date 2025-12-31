@@ -88,14 +88,15 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
       }
 
       const targetAgency = isSuper ? (document.getElementById('importAid') as HTMLSelectElement).value : user.agency_id;
-      const res = await supabase.importTickets(rows, user.id, targetAgency);
       
-      if (res.error) {
-          notify('error', res.error);
-      } else {
-          notify('success', `${res.success} tickets importés. Coût : ${res.cost || 0} crédits.`);
-          setShowImport(false);
-          loadData();
+      // Fix: supabase.importTickets throws errors instead of returning an error object, so use try-catch
+      try {
+        const res = await supabase.importTickets(rows, user.id, targetAgency);
+        notify('success', `${res.success} tickets importés. Coût : ${res.cost || 0} crédits.`);
+        setShowImport(false);
+        loadData();
+      } catch (err: any) {
+        notify('error', err.message || "Une erreur est survenue lors de l'importation.");
       }
       setLoading(false);
     };
