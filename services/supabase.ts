@@ -13,21 +13,33 @@ import {
   SubscriptionPlan
 } from '../types';
 
-// Safe access to environment variables with fallback
-const getEnv = (key: string) => {
+// SOLUTION DÉFINITIVE :
+// 1. Accès direct aux propriétés (ex: .VITE_SUPABASE_URL) requis par Vite pour le remplacement statique.
+// 2. Gestion de l'absence de 'import.meta.env' pour éviter le crash "undefined".
+const getSupabaseConfig = () => {
   try {
-    return (import.meta as any).env?.[key];
-  } catch (e) {
-    return undefined;
+    // On vérifie d'abord si import.meta et import.meta.env existent
+    // @ts-ignore
+    const env = (import.meta && import.meta.env ? import.meta.env : {}) as any;
+    
+    return {
+      url: env.VITE_SUPABASE_URL,
+      key: env.VITE_SUPABASE_ANON_KEY
+    };
+  } catch (error) {
+    // Fallback de sécurité absolue pour éviter le crash blanc
+    return { url: undefined, key: undefined };
   }
 };
 
-const supabaseUrl = getEnv('VITE_SUPABASE_URL');
-const supabaseKey = getEnv('VITE_SUPABASE_ANON_KEY');
+const { url: envUrl, key: envKey } = getSupabaseConfig();
 
-// Log pour le débogage (à retirer en production si souhaité)
+const supabaseUrl = envUrl;
+const supabaseKey = envKey;
+
+// Log pour le débogage
 if (!supabaseUrl || !supabaseKey) {
-  console.warn("⚠️ Attention : Les clés Supabase ne sont pas détectées. Vérifiez votre fichier .env");
+  console.warn("⚠️ Mode Hors Ligne : Clés Supabase non trouvées. Vérifiez le fichier .env");
 }
 
 const client: SupabaseClient = createClient(
@@ -58,6 +70,7 @@ class SupabaseService {
 
   // --- PLANS ---
   async getSubscriptionPlans(): Promise<SubscriptionPlan[]> {
+    if (!this.isConfigured()) return [];
     const { data, error } = await client.from('subscription_plans').select('*').order('order_index');
     return (data as SubscriptionPlan[]) || [];
   }
@@ -83,11 +96,13 @@ class SupabaseService {
   }
 
   async getAgencies(): Promise<Agency[]> { 
+    if (!this.isConfigured()) return [];
     const { data } = await client.from('agencies').select('*').order('name'); 
     return (data as Agency[]) || [];
   }
 
   async getAgency(id: string): Promise<Agency> { 
+    if (!this.isConfigured()) throw new Error("Supabase non configuré");
     const { data } = await client.from('agencies').select('*').eq('id', id).single(); 
     return data as Agency;
   }
@@ -165,6 +180,10 @@ class SupabaseService {
 
   // --- MÉTIER (STATS, TICKETS & VENTES) ---
   async getStats(aid: string, role: UserRole) {
+    if (!this.isConfigured()) {
+      return { revenue: 0, soldCount: 0, stockCount: 0, userCount: 0, agencyCount: 0, currency: 'GNF', credits: 0 };
+    }
+
     const isSuper = role === UserRole.SUPER_ADMIN;
     const [salesRes, ticketsRes, profilesRes, agenciesRes] = await Promise.all([
       isSuper ? client.from('sales').select('amount') : client.from('sales').select('amount').eq('agency_id', aid),
@@ -253,6 +272,7 @@ class SupabaseService {
   }
 
   async getTickets(aid: string, role: UserRole): Promise<Ticket[]> {
+    if (!this.isConfigured()) return [];
     let q = client.from('tickets').select('*').order('created_at', { ascending: false });
     if (role !== UserRole.SUPER_ADMIN) q = q.eq('agency_id', aid);
     const { data } = await q;
@@ -260,6 +280,7 @@ class SupabaseService {
   }
 
   async getSales(aid: string, role: UserRole): Promise<Sale[]> {
+    if (!this.isConfigured()) return [];
     let q = client.from('sales').select('*, profiles:seller_id(display_name), tickets:ticket_id(username, profile, time_limit)');
     if (role !== UserRole.SUPER_ADMIN) q = q.eq('agency_id', aid);
     const { data } = await q.order('sold_at', { ascending: false });
@@ -270,6 +291,7 @@ class SupabaseService {
   }
 
   async getUsers(aid: string, role: UserRole): Promise<UserProfile[]> {
+    if (!this.isConfigured()) return [];
     let q = client.from('profiles').select('*');
     if (role !== UserRole.SUPER_ADMIN) q = q.eq('agency_id', aid);
     const { data } = await q;
@@ -277,6 +299,7 @@ class SupabaseService {
   }
 
   async getLogs(aid: string, role: UserRole): Promise<ActivityLog[]> {
+    if (!this.isConfigured()) return [];
     let q = client.from('logs').select('*').order('created_at', { ascending: false }).limit(100);
     if (role !== UserRole.SUPER_ADMIN) q = q.eq('agency_id', aid);
     const { data } = await q;
