@@ -14,7 +14,6 @@ import {
   SubscriptionPlan
 } from '../types';
 
-// Use process.env for environment variables to avoid ImportMeta errors in this environment
 const supabaseUrl = process.env.VITE_SUPABASE_URL;
 const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY;
 
@@ -82,6 +81,7 @@ class SupabaseService {
   }
 
   async createAgency(name: string, actor: UserProfile): Promise<Agency> {
+    if (actor.role !== UserRole.SUPER_ADMIN) throw new Error("Accès refusé");
     const { data, error } = await client.from('agencies').insert({
       name,
       status: 'active',
@@ -141,7 +141,7 @@ class SupabaseService {
     return data?.pin === pin; 
   }
 
-  // --- METIER (TICKETS & VENTES) ---
+  // --- MÉTIER (STATS, TICKETS & VENTES) ---
   async getStats(aid: string, role: UserRole) {
     const isSuper = role === UserRole.SUPER_ADMIN;
     const [salesRes, ticketsRes, profilesRes, agenciesRes] = await Promise.all([
@@ -217,6 +217,10 @@ class SupabaseService {
       settings: { ...agency.settings, total_tickets_ever: (agency.settings?.total_tickets_ever || 0) + toInsert.length }
     }).eq('id', aid);
 
+    await client.from('credit_transactions').insert({
+      agency_id: aid, amount: -cost, type: 'CONSUMPTION', description: `Import ${toInsert.length} tickets`, created_by: uid
+    });
+
     return { success: toInsert.length, cost };
   }
 
@@ -264,10 +268,12 @@ class SupabaseService {
   async updateAgencyModules(id: string, modules: AgencyModules, actor: UserProfile): Promise<void> {
     const { data: agency } = await client.from('agencies').select('settings').eq('id', id).single();
     await client.from('agencies').update({ settings: { ...(agency?.settings || {}), modules } }).eq('id', id);
+    await this.log(actor, 'AGENCY_MODULES', `Modules mis à jour pour ${id}`);
   }
 
   async setAgencyStatus(id: string, status: AgencyStatus, actor: UserProfile): Promise<void> {
     await client.from('agencies').update({ status }).eq('id', id);
+    await this.log(actor, 'AGENCY_STATUS', `Agence ${id} -> ${status}`);
   }
 
   async addUser(userData: any): Promise<void> { 
@@ -279,7 +285,9 @@ class SupabaseService {
   }
 
   async updatePassword(uid: string, password: string, actor: UserProfile): Promise<boolean> { 
-    await client.from('profiles').update({ password }).eq('id', uid);
+    const { error } = await client.from('profiles').update({ password }).eq('id', uid);
+    if (error) return false;
+    await this.log(actor, 'PASSWORD_CHANGE', `Profil ${uid}`);
     return true; 
   }
 

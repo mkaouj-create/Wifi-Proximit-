@@ -3,7 +3,8 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   LayoutDashboard, ShoppingBag, Database, Users, Lock, Sun, Moon, 
   History, Settings, Building2, Eye, EyeOff, 
-  KeyRound, Loader2, Power, ShieldAlert, X, ArrowLeft, CalendarDays
+  KeyRound, Loader2, Power, ShieldAlert, X, ArrowLeft, CalendarDays,
+  ClipboardList
 } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import TicketManager from './components/TicketManager';
@@ -12,6 +13,7 @@ import UserManagement from './components/UserManagement';
 import SalesHistory from './components/SalesHistory';
 import AgencySettings from './components/AgencySettings';
 import AgencyManager from './components/AgencyManager';
+import TaskManager from './components/TaskManager';
 import LandingPage from './components/LandingPage';
 import { supabase } from './services/supabase';
 import { UserProfile, UserRole, Agency } from './types';
@@ -74,20 +76,29 @@ const App: React.FC = () => {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    const profile = await supabase.signIn(loginEmail, loginPassword);
-    if (profile) {
-      setUser(profile);
-      setPinLocked(true);
-      setLoginPassword('');
-      notify('success', 'Connecté');
-    } else notify('error', "Échec");
-    setIsLoading(false);
+    try {
+      const profile = await supabase.signIn(loginEmail, loginPassword);
+      if (profile) {
+        setUser(profile);
+        setPinLocked(true);
+        setLoginPassword('');
+        notify('success', 'Connecté');
+      } else {
+        notify('error', "Échec");
+      }
+    } catch (err) {
+      notify('error', "Erreur");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleLogout = () => {
     if (user) supabase.signOut(user);
     setUser(null);
     setCurrentAgency(null);
+    setPinLocked(false);
+    setPin('');
     setShowLogin(false);
     notify('info', 'Déconnecté');
   };
@@ -98,7 +109,8 @@ const App: React.FC = () => {
       setPin(nextPin);
       if (nextPin.length === 4) {
         setIsLoading(true);
-        if (await supabase.verifyPin(user!.id, nextPin)) {
+        const isValid = await supabase.verifyPin(user!.id, nextPin);
+        if (isValid) {
           setPinLocked(false);
           setPin('');
         } else {
@@ -140,7 +152,7 @@ const App: React.FC = () => {
       {currentView === 'LOGIN' && (
         <div className="min-h-screen bg-primary-600 dark:bg-gray-950 flex items-center justify-center p-6">
           <div className="bg-white dark:bg-gray-900 w-full max-w-sm rounded-[3rem] p-10 shadow-2xl relative animate-in zoom-in">
-            <button onClick={() => setShowLogin(false)} className="absolute top-8 left-8 p-3 text-gray-400 hover:bg-gray-100 rounded-2xl transition-all"><ArrowLeft size={24} /></button>
+            <button onClick={() => setShowLogin(false)} className="absolute top-8 left-8 p-3 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-2xl transition-all"><ArrowLeft size={24} /></button>
             <div className="text-center pt-10 mb-10">
               <div className="w-20 h-20 bg-primary-50 dark:bg-primary-900/30 text-primary-600 rounded-[2rem] flex items-center justify-center mx-auto mb-4 shadow-inner"><Lock size={32} /></div>
               <h1 className="text-2xl font-black uppercase tracking-tighter dark:text-white">Wifi Pro</h1>
@@ -202,19 +214,20 @@ const App: React.FC = () => {
               <h1 className="text-xl font-black dark:text-white uppercase tracking-tighter">Wifi Pro</h1>
             </div>
             <nav className="space-y-1 flex-1">
-              <NavItem icon={<LayoutDashboard/>} label="Dashboard" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
-              {canAccess('sales') && <NavItem icon={<ShoppingBag/>} label="Terminal" active={activeTab === 'sales'} onClick={() => setActiveTab('sales')} />}
-              {canAccess('history') && <NavItem icon={<History/>} label="Ventes" active={activeTab === 'history'} onClick={() => setActiveTab('history')} />}
-              {canAccess('tickets') && <NavItem icon={<Database/>} label="Stocks" active={activeTab === 'tickets'} onClick={() => setActiveTab('tickets')} />}
+              <NavItem icon={<LayoutDashboard/>} label={t.dashboard} active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
+              {canAccess('sales') && <NavItem icon={<ShoppingBag/>} label={t.terminal} active={activeTab === 'sales'} onClick={() => setActiveTab('sales')} />}
+              {canAccess('history') && <NavItem icon={<History/>} label={t.history} active={activeTab === 'history'} onClick={() => setActiveTab('history')} />}
+              {canAccess('tickets') && <NavItem icon={<Database/>} label={t.tickets} active={activeTab === 'tickets'} onClick={() => setActiveTab('tickets')} />}
+              {canAccess('tasks') && <NavItem icon={<ClipboardList/>} label={t.tasks} active={activeTab === 'tasks'} onClick={() => setActiveTab('tasks')} />}
               <div className="pt-8 pb-4 opacity-30 text-[9px] font-black uppercase tracking-widest ml-4">Gestion</div>
-              {user!.role === UserRole.SUPER_ADMIN && <NavItem icon={<Building2/>} label="Agences" active={activeTab === 'agencies'} onClick={() => setActiveTab('agencies')} />}
-              {user!.role !== UserRole.SELLER && <NavItem icon={<Users/>} label="Équipe" active={activeTab === 'users'} onClick={() => setActiveTab('users')} />}
-              {user!.role !== UserRole.SELLER && <NavItem icon={<Settings/>} label="Configuration" active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />}
+              {user!.role === UserRole.SUPER_ADMIN && <NavItem icon={<Building2/>} label={t.agencies} active={activeTab === 'agencies'} onClick={() => setActiveTab('agencies')} />}
+              {user!.role !== UserRole.SELLER && <NavItem icon={<Users/>} label={t.users} active={activeTab === 'users'} onClick={() => setActiveTab('users')} />}
+              {user!.role !== UserRole.SELLER && <NavItem icon={<Settings/>} label={t.settings} active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />}
             </nav>
             <div className="mt-8 pt-8 border-t dark:border-gray-800 flex gap-2">
               <button onClick={() => setDarkMode(!darkMode)} className="p-4 bg-gray-50 dark:bg-gray-800 rounded-2xl text-gray-400 hover:text-primary-600 transition-all flex-1 flex justify-center">{darkMode ? <Sun size={20}/> : <Moon size={20}/>}</button>
               <button onClick={() => setPinLocked(true)} className="p-4 bg-gray-50 dark:bg-gray-800 rounded-2xl text-gray-400 flex-1 flex justify-center"><Lock size={20}/></button>
-              <button onClick={handleLogout} className="p-4 bg-red-50 text-red-500 rounded-2xl flex-1 flex justify-center transition-all"><Power size={20}/></button>
+              <button onClick={handleLogout} className="p-4 bg-red-50 text-red-500 rounded-2xl flex-1 flex justify-center transition-all hover:bg-red-100"><Power size={20}/></button>
             </div>
           </aside>
 
@@ -224,6 +237,7 @@ const App: React.FC = () => {
               {activeTab === 'sales' && <SalesTerminal user={user!} lang={lang} notify={notify} />}
               {activeTab === 'history' && <SalesHistory user={user!} lang={lang} />}
               {activeTab === 'tickets' && <TicketManager user={user!} lang={lang} notify={notify} />}
+              {activeTab === 'tasks' && <TaskManager user={user!} lang={lang} />}
               {activeTab === 'agencies' && <AgencyManager user={user!} lang={lang} notify={notify} />}
               {activeTab === 'users' && <UserManagement user={user!} lang={lang} />}
               {activeTab === 'settings' && <AgencySettings user={user!} lang={lang} />}
