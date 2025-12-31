@@ -93,8 +93,21 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, notify }) => {
     }
   };
 
+  const handleCreatePlan = () => {
+    setEditingPlan({
+      id: crypto.randomUUID(), // Generate a temporary ID for creation
+      name: 'Nouveau Plan',
+      months: 1,
+      price: 100000,
+      currency: 'GNF',
+      features: ['Tableau de bord', 'Support Standard'],
+      is_popular: false,
+      order_index: plans.length + 1
+    });
+  };
+
   const handleSavePlan = async () => {
-    if (!editingPlan) return;
+    if (!editingPlan || !editingPlan.name) return;
     setIsProcessing(true);
     try {
         await supabase.updateSubscriptionPlan(editingPlan as SubscriptionPlan, user);
@@ -102,7 +115,21 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, notify }) => {
         setEditingPlan(null);
         loadPlans();
     } catch (e) {
-        notify('error', "Erreur.");
+        notify('error', "Erreur lors de la sauvegarde.");
+    } finally {
+        setIsProcessing(false);
+    }
+  };
+
+  const handleDeletePlan = async (id: string) => {
+    if (!confirm("Voulez-vous vraiment supprimer ce forfait ?")) return;
+    setIsProcessing(true);
+    try {
+        await supabase.deleteSubscriptionPlan(id, user);
+        notify('success', "Plan supprimé.");
+        loadPlans();
+    } catch (e) {
+        notify('error', "Erreur lors de la suppression.");
     } finally {
         setIsProcessing(false);
     }
@@ -238,12 +265,15 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, notify }) => {
         </div>
       )}
 
-      {/* Modal: Plans Editor */}
+      {/* Modal: Plans Editor (Complet CRUD) */}
       {showPlans && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in">
           <div className="bg-white dark:bg-gray-800 w-full max-w-4xl h-[80vh] rounded-[3rem] p-10 shadow-2xl flex flex-col border dark:border-gray-700">
              <div className="flex justify-between items-center mb-8">
-                <h3 className="text-2xl font-black uppercase">Configuration Forfaits</h3>
+                <div className="flex items-center gap-4">
+                    <h3 className="text-2xl font-black uppercase">Configuration Forfaits</h3>
+                    <button onClick={handleCreatePlan} className="p-3 bg-primary-600 text-white rounded-2xl hover:bg-primary-700 shadow-lg shadow-primary-500/30 transition-all active:scale-95"><Plus size={18} /></button>
+                </div>
                 <button onClick={() => setShowPlans(false)} className="p-3 bg-gray-100 dark:bg-gray-700 rounded-2xl"><X size={20}/></button>
              </div>
              <div className="flex-1 overflow-y-auto space-y-4 pr-2 no-scrollbar">
@@ -251,22 +281,30 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, notify }) => {
                     {plans.map(p => (
                         <div key={p.id} className="p-6 bg-gray-50 dark:bg-gray-900/50 rounded-[2rem] border dark:border-gray-800 flex items-center justify-between group">
                             <div><p className="font-black text-lg">{p.name}</p><p className="text-xs text-indigo-500 font-bold">{p.price.toLocaleString()} {p.currency} / {p.months}m</p></div>
-                            <button onClick={() => setEditingPlan(p)} className="p-3 bg-white dark:bg-gray-800 rounded-xl hover:text-primary-500 shadow-sm transition-all"><Edit3 size={18} /></button>
+                            <div className="flex gap-2">
+                                <button onClick={() => setEditingPlan(p)} className="p-3 bg-white dark:bg-gray-800 rounded-xl hover:text-primary-500 shadow-sm transition-all active:scale-95"><Edit3 size={16} /></button>
+                                <button onClick={() => handleDeletePlan(p.id)} className="p-3 bg-white dark:bg-gray-800 rounded-xl text-red-400 hover:text-red-500 shadow-sm transition-all active:scale-95"><Trash2 size={16} /></button>
+                            </div>
                         </div>
                     ))}
+                    {plans.length === 0 && <p className="col-span-2 text-center text-gray-400 text-sm font-bold p-10">Aucun forfait configuré. Créez-en un nouveau !</p>}
                 </div>
              </div>
              {editingPlan && (
                 <div className="absolute inset-0 bg-white dark:bg-gray-800 p-10 rounded-[3rem] flex flex-col z-10 animate-in slide-in-from-right">
                     <h4 className="text-xl font-black uppercase mb-8">Édition : {editingPlan.name}</h4>
-                    <div className="grid grid-cols-2 gap-6 flex-1 overflow-y-auto pr-2 no-scrollbar">
+                    <div className="grid grid-cols-2 gap-6 flex-1 overflow-y-auto pr-2 no-scrollbar content-start">
                         <div className="space-y-1"><label className="text-[10px] font-black text-gray-400 uppercase">Nom</label><input type="text" className="w-full p-4 bg-gray-50 dark:bg-gray-900 border-none rounded-xl font-bold dark:text-white" value={editingPlan.name} onChange={e => setEditingPlan({...editingPlan, name: e.target.value})} /></div>
                         <div className="space-y-1"><label className="text-[10px] font-black text-gray-400 uppercase">Mois</label><input type="number" className="w-full p-4 bg-gray-50 dark:bg-gray-900 border-none rounded-xl font-bold dark:text-white" value={editingPlan.months} onChange={e => setEditingPlan({...editingPlan, months: parseInt(e.target.value)})} /></div>
                         <div className="space-y-1"><label className="text-[10px] font-black text-gray-400 uppercase">Prix</label><input type="number" className="w-full p-4 bg-gray-50 dark:bg-gray-900 border-none rounded-xl font-bold dark:text-white" value={editingPlan.price} onChange={e => setEditingPlan({...editingPlan, price: parseInt(e.target.value)})} /></div>
                         <div className="space-y-1"><label className="text-[10px] font-black text-gray-400 uppercase">Devise</label><input type="text" className="w-full p-4 bg-gray-50 dark:bg-gray-900 border-none rounded-xl font-bold dark:text-white" value={editingPlan.currency} onChange={e => setEditingPlan({...editingPlan, currency: e.target.value})} /></div>
-                        <div className="col-span-2 space-y-1"><label className="text-[10px] font-black text-gray-400 uppercase">Avantages (virgules)</label><textarea className="w-full p-4 bg-gray-50 dark:bg-gray-900 border-none rounded-xl font-bold dark:text-white" rows={3} value={editingPlan.features?.join(', ')} onChange={e => setEditingPlan({...editingPlan, features: e.target.value.split(',').map(f => f.trim())})} /></div>
+                        <div className="col-span-2 space-y-1"><label className="text-[10px] font-black text-gray-400 uppercase">Avantages (séparés par virgules)</label><textarea className="w-full p-4 bg-gray-50 dark:bg-gray-900 border-none rounded-xl font-bold dark:text-white resize-none" rows={3} value={editingPlan.features?.join(', ')} onChange={e => setEditingPlan({...editingPlan, features: e.target.value.split(',').map(f => f.trim())})} /></div>
+                        <div className="col-span-2 flex items-center gap-3 p-4 bg-gray-50 dark:bg-gray-900 rounded-xl cursor-pointer" onClick={() => setEditingPlan({...editingPlan, is_popular: !editingPlan.is_popular})}>
+                            {editingPlan.is_popular ? <ToggleRight className="text-primary-500" size={24} /> : <ToggleLeft className="text-gray-300" size={24} />}
+                            <span className="text-xs font-black uppercase text-gray-500">Marquer comme "Populaire"</span>
+                        </div>
                     </div>
-                    <div className="mt-8 flex gap-4"><button onClick={() => setEditingPlan(null)} className="flex-1 py-4 bg-gray-100 dark:bg-gray-700 rounded-2xl font-black text-xs uppercase">Annuler</button><button onClick={handleSavePlan} className="flex-1 py-4 bg-primary-600 text-white rounded-2xl font-black text-xs uppercase flex items-center justify-center gap-2">{isProcessing ? <Loader2 size={16} className="animate-spin"/> : <Save size={16}/>} Sauvegarder</button></div>
+                    <div className="mt-8 flex gap-4"><button onClick={() => setEditingPlan(null)} className="flex-1 py-4 bg-gray-100 dark:bg-gray-700 rounded-2xl font-black text-xs uppercase">Annuler</button><button onClick={handleSavePlan} className="flex-1 py-4 bg-primary-600 text-white rounded-2xl font-black text-xs uppercase flex items-center justify-center gap-2 shadow-lg">{isProcessing ? <Loader2 size={16} className="animate-spin"/> : <Save size={16}/>} Sauvegarder</button></div>
                 </div>
              )}
           </div>
