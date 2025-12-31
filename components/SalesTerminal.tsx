@@ -5,7 +5,6 @@ import { supabase } from '../services/supabase';
 import { Ticket, UserProfile, TicketStatus, Agency } from '../types';
 import { translations, Language } from '../i18n';
 
-// Fix: Removed missing export Tooltip from App
 interface SalesTerminalProps {
   user: UserProfile;
   lang: Language;
@@ -57,29 +56,48 @@ const SalesTerminal: React.FC<SalesTerminalProps> = ({ user, lang, notify }) => 
     if (!soldTicketInfo) return;
     const text = getReceiptMessage(soldTicketInfo);
     try {
-      await navigator.clipboard.writeText(text);
-      notify('success', 'Code copié avec succès');
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        notify('success', 'Code copié dans le presse-papier');
+      } else {
+        // Fallback pour anciens navigateurs ou contextes non sécurisés
+        const textArea = document.createElement("textarea");
+        textArea.value = text;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+        notify('success', 'Code copié');
+      }
     } catch (err) {
       notify('error', 'Échec de la copie');
     }
   };
 
   const sendWhatsApp = (ticket: Ticket, phone: string) => {
+    const message = getReceiptMessage(ticket);
+    const encodedMessage = encodeURIComponent(message);
+    
+    let url = "";
     if (!phone) {
-        const message = getReceiptMessage(ticket);
-        const url = `https://wa.me/?text=${encodeURIComponent(message)}`;
-        window.open(url, '_blank', 'noopener,noreferrer');
-        return;
+        // Partage WhatsApp ouvert (sans numéro spécifique)
+        url = `https://wa.me/?text=${encodedMessage}`;
+    } else {
+        let cleanPhone = phone.replace(/\D/g, '').replace(/^0+/, '');
+        // Formatage pour la Guinée par défaut si 9 chiffres
+        if (cleanPhone.length === 9 && currency === 'GNF') {
+            cleanPhone = '224' + cleanPhone;
+        }
+        url = `https://wa.me/${cleanPhone}?text=${encodedMessage}`;
     }
     
-    let cleanPhone = phone.replace(/\D/g, '').replace(/^0+/, '');
-    if (cleanPhone.length === 9 && currency === 'GNF') {
-        cleanPhone = '224' + cleanPhone;
+    // Tentative d'ouverture
+    const win = window.open(url, '_blank', 'noopener,noreferrer');
+    if (!win) {
+      // Fallback si popup bloquée ou environnement restrictif
+      handleCopy();
+      notify('info', 'Lien copié car WhatsApp n\'a pu s\'ouvrir');
     }
-
-    const message = getReceiptMessage(ticket);
-    const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
-    window.open(url, '_blank', 'noopener,noreferrer');
   };
 
   const executeSale = async () => {
@@ -167,9 +185,15 @@ const SalesTerminal: React.FC<SalesTerminalProps> = ({ user, lang, notify }) => 
                     />
                 </div>
                 <div className="grid grid-cols-3 gap-2">
-                  <button onClick={() => sendWhatsApp(soldTicketInfo, customerPhone)} className="flex flex-col items-center justify-center gap-1.5 py-4 bg-green-500 text-white rounded-2xl font-black text-[9px] active:scale-95 shadow-lg shadow-green-500/20"><Phone size={18}/><span className="uppercase">{t.whatsapp}</span></button>
-                  <button onClick={handleCopy} className="flex flex-col items-center justify-center gap-1.5 py-4 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-300 rounded-2xl font-black text-[9px] active:scale-95"><Copy size={18}/><span className="uppercase">Copier</span></button>
-                  <button onClick={() => { if(navigator.share) navigator.share({title: 'WiFi', text: getReceiptMessage(soldTicketInfo)}) }} className="flex flex-col items-center justify-center gap-1.5 py-4 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-2xl font-black text-[9px] active:scale-95"><Share2 size={18}/><span className="uppercase">Partager</span></button>
+                  <button onClick={() => sendWhatsApp(soldTicketInfo, customerPhone)} className="flex flex-col items-center justify-center gap-1.5 py-4 bg-green-500 text-white rounded-2xl font-black text-[9px] active:scale-95 shadow-lg shadow-green-500/20">
+                    <Phone size={18}/><span className="uppercase">{t.whatsapp}</span>
+                  </button>
+                  <button onClick={handleCopy} className="flex flex-col items-center justify-center gap-1.5 py-4 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-300 rounded-2xl font-black text-[9px] active:scale-95">
+                    <Copy size={18}/><span className="uppercase">Copier</span>
+                  </button>
+                  <button onClick={() => { if(navigator.share) navigator.share({title: 'Ticket WiFi', text: getReceiptMessage(soldTicketInfo)}) }} className="flex flex-col items-center justify-center gap-1.5 py-4 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-2xl font-black text-[9px] active:scale-95">
+                    <Share2 size={18}/><span className="uppercase">Partager</span>
+                  </button>
                 </div>
             </div>
           </div>
