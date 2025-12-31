@@ -295,8 +295,22 @@ class SupabaseService {
 
   async updateTicketPrice(id: string, price: number): Promise<void> { await client.from('tickets').update({ price }).eq('id', id); }
 
-  async updateProfilePrices(aid: string, profile: string, price: number): Promise<number> {
-    const { data } = await client.from('tickets').update({ price }).eq('agency_id', aid).eq('profile', profile).eq('status', TicketStatus.UNSOLD).select();
+  async updateProfilePrices(aid: string | null, profile: string, price: number, actor: UserProfile): Promise<number> {
+    let query = client.from('tickets').update({ price }).eq('profile', profile).eq('status', TicketStatus.UNSOLD);
+    
+    // Si ce n'est pas un Super Admin, on force l'agence de l'utilisateur
+    if (actor.role !== UserRole.SUPER_ADMIN) {
+      query = query.eq('agency_id', actor.agency_id);
+    } 
+    // Si c'est un Super Admin mais qu'une agence spécifique est choisie (pas "ALL")
+    else if (aid && aid !== 'ALL') {
+      query = query.eq('agency_id', aid);
+    }
+    
+    const { data, error } = await query.select();
+    if (error) throw error;
+    
+    await this.log(actor, 'TICKET_UPDATE', `Mise à jour groupée: ${profile} -> ${price} (${data?.length || 0} tickets)`);
     return data?.length || 0;
   }
 

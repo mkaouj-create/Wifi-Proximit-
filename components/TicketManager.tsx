@@ -5,7 +5,6 @@ import { supabase } from '../services/supabase';
 import { Ticket, UserProfile, TicketStatus, UserRole, Agency } from '../types';
 import { translations, Language } from '../i18n';
 
-// Fix: Removed missing export Tooltip from App
 const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type: 'success' | 'error' | 'info', message: string) => void }> = ({ user, lang, notify }) => {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [agencies, setAgencies] = useState<Agency[]>([]);
@@ -114,8 +113,14 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
 
     setLoading(true);
     try {
-      const aid = (isSuper && selectedAgency !== 'ALL') ? selectedAgency : user.agency_id;
-      const count = await supabase.updateProfilePrices(aid, bulkProfile, parseInt(newPrice));
+      // Pour les Super Admin, on utilise selectedAgency (qui peut être 'ALL')
+      // Pour les autres, on laisse le service gérer avec l'ID de l'acteur
+      const count = await supabase.updateProfilePrices(
+        isSuper ? selectedAgency : null, 
+        bulkProfile, 
+        parseInt(newPrice),
+        user
+      );
       notify('success', `${count} tickets mis à jour.`);
       setShowBulkPrice(false);
       setNewPrice('');
@@ -359,7 +364,7 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
       {/* MODAL MODIF TICKET UNIQUE */}
       {editingTicket && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in">
-          <div className="bg-white dark:bg-gray-800 w-full max-w-sm rounded-[2.5rem] p-10 shadow-2xl animate-in zoom-in">
+          <div className="bg-white dark:bg-gray-800 w-full max-sm rounded-[2.5rem] p-10 shadow-2xl animate-in zoom-in">
             <h3 className="text-xl font-black mb-6 dark:text-white uppercase tracking-tight leading-none">Modifier Tarif</h3>
             <p className="text-[10px] font-black text-gray-400 uppercase mb-4 tracking-widest">{editingTicket.username}</p>
             <input 

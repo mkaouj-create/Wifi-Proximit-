@@ -1,6 +1,7 @@
 
+// Import React to fix namespace error for React.FC
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, User, Building2, Download, Trash2, AlertTriangle, X, Tag, Wifi, Banknote, Clock, Phone, Share2, Copy, Check, Calendar } from 'lucide-react';
+import { Search, User, Download, Trash2, AlertTriangle, X, Tag, Wifi, Banknote, Clock, Phone, Share2, Copy, Check, Calendar } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import { Sale, UserProfile, UserRole, Agency } from '../types';
 import { translations, Language } from '../i18n';
@@ -77,6 +78,22 @@ const SalesHistory: React.FC<SalesHistoryProps> = ({ user, lang }) => {
     } catch (err) {
       console.error('Failed to copy', err);
     }
+  };
+
+  const sendWhatsApp = () => {
+    if (!selectedSale) return;
+    const message = getMessage();
+    let phone = selectedSale.customer_phone || '';
+    let url = `https://wa.me/?text=${encodeURIComponent(message)}`;
+    
+    if (phone) {
+        let cleanPhone = phone.replace(/\D/g, '').replace(/^0+/, '');
+        if (cleanPhone.length === 9 && currency === 'GNF') {
+            cleanPhone = '224' + cleanPhone;
+        }
+        url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
+    }
+    window.open(url, '_blank', 'noopener,noreferrer');
   };
 
   return (
@@ -204,27 +221,27 @@ const SalesHistory: React.FC<SalesHistoryProps> = ({ user, lang }) => {
         )}
       </div>
 
-      {/* MODAL DETIALS - BOTTOM SHEET MOBILE */}
+      {/* MODAL DETIALS - PREMIUM GLASSMORPHISM */}
       {selectedSale && (
-        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center p-0 md:p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-300">
-           <div className="bg-white dark:bg-gray-800 w-full md:max-w-sm rounded-t-[2.5rem] md:rounded-[2.5rem] p-8 md:p-10 shadow-2xl animate-in slide-in-from-bottom md:zoom-in duration-300 relative">
-               <button onClick={() => setSelectedSale(null)} className="absolute top-6 right-6 p-2 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-500 hover:text-gray-900 transition-colors"><X className="w-5 h-5" /></button>
+        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center p-0 md:p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
+           <div className="bg-white/95 dark:bg-gray-800/95 backdrop-blur-2xl w-full md:max-w-sm rounded-t-[3rem] md:rounded-[3rem] p-8 md:p-10 shadow-2xl animate-in slide-in-from-bottom md:zoom-in duration-300 relative border-t border-white/20 dark:border-gray-700/50">
+               <button onClick={() => setSelectedSale(null)} className="absolute top-8 right-8 p-2.5 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-400 hover:text-gray-900 dark:hover:text-white transition-all active:scale-90"><X className="w-5 h-5" /></button>
                <div className="text-center space-y-4 mb-8 pt-4">
-                   <div className="w-16 h-16 md:w-20 md:h-20 bg-primary-100 dark:bg-primary-900/30 text-primary-600 rounded-3xl flex items-center justify-center mx-auto shadow-lg"><Tag size={32} /></div>
+                   <div className="w-16 h-16 md:w-20 md:h-20 bg-primary-100 dark:bg-primary-900/30 text-primary-600 rounded-[2rem] flex items-center justify-center mx-auto shadow-lg shadow-primary-500/10"><Tag size={32} /></div>
                    <h3 className="text-xl md:text-2xl font-black text-gray-900 dark:text-white uppercase tracking-tight">Détails Vente</h3>
                </div>
                <div className="space-y-3">
                    <DetailRow icon={<Wifi className="text-primary-500" />} label="Code Wifi" val={selectedSale.ticket_username || 'N/A'} isBold />
                    <DetailRow icon={<Banknote className="text-green-500" />} label="Prix" val={`${selectedSale.amount.toLocaleString()} ${currency}`} />
                    <DetailRow icon={<Clock className="text-amber-500" />} label="Validité" val={selectedSale.ticket_time_limit || 'N/A'} />
-                   <DetailRow icon={<Phone className="text-blue-500" />} label="WhatsApp" val={selectedSale.customer_phone || 'Non renseigné'} />
+                   <DetailRow icon={<Phone className="text-blue-500" />} label="WhatsApp Client" val={selectedSale.customer_phone || 'Non renseigné'} />
                </div>
                <div className="flex gap-3 mt-8">
-                 <button onClick={handleCopy} className="flex-1 py-4 bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2">{copied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />} {t.copyCode}</button>
-                 <button onClick={() => { if(navigator.share) navigator.share({title:'WiFi', text:getMessage()}) }} className="flex-1 py-4 bg-green-500 text-white rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-green-500/20"><Share2 className="w-4 h-4" /> {t.whatsapp}</button>
+                 <button onClick={handleCopy} className="flex-1 py-4 bg-gray-100 dark:bg-gray-700/50 text-gray-900 dark:text-white rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 active:scale-95 transition-all">{copied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />} {t.copyCode}</button>
+                 <button onClick={sendWhatsApp} className="flex-1 py-4 bg-green-500 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-green-500/20 active:scale-95 transition-all"><Share2 className="w-4 h-4" /> {t.whatsapp}</button>
                </div>
                {user.role !== UserRole.SELLER && (
-                 <button onClick={() => { setSaleToCancel(selectedSale); setSelectedSale(null); }} className="w-full mt-3 py-3 text-[10px] font-black uppercase text-red-500 hover:bg-red-50 rounded-xl transition-all">Annuler la transaction</button>
+                 <button onClick={() => { setSaleToCancel(selectedSale); setSelectedSale(null); }} className="w-full mt-4 py-3 text-[10px] font-black uppercase text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 rounded-xl transition-all">Annuler la transaction</button>
                )}
            </div>
         </div>
@@ -233,13 +250,13 @@ const SalesHistory: React.FC<SalesHistoryProps> = ({ user, lang }) => {
       {/* CONFIRM CANCEL MODAL */}
       {saleToCancel && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in">
-          <div className="bg-white dark:bg-gray-800 w-full max-w-sm rounded-[2.5rem] p-10 shadow-2xl animate-in zoom-in text-center">
-            <div className="w-20 h-20 bg-red-100 dark:bg-red-900/20 text-red-600 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-lg"><AlertTriangle className="w-10 h-10" /></div>
+          <div className="bg-white dark:bg-gray-800 w-full max-w-sm rounded-[3rem] p-10 shadow-2xl animate-in zoom-in text-center border dark:border-gray-700">
+            <div className="w-20 h-20 bg-red-100 dark:bg-red-900/20 text-red-600 rounded-[2rem] flex items-center justify-center mx-auto mb-6 shadow-lg"><AlertTriangle className="w-10 h-10" /></div>
             <h3 className="text-2xl font-black text-gray-900 dark:text-white mb-2 uppercase tracking-tight">{t.cancelSale}</h3>
             <p className="text-sm text-gray-500 dark:text-gray-400 font-medium mb-8 leading-relaxed">Confirmez-vous la réintégration du ticket en stock ?</p>
             <div className="flex flex-col gap-3">
               <button onClick={handleCancelSale} className="w-full py-5 bg-red-500 text-white rounded-2xl font-black text-sm uppercase tracking-widest active:scale-95 shadow-xl shadow-red-500/30">Confirmer Annulation</button>
-              <button onClick={() => setSaleToCancel(null)} className="w-full py-5 bg-gray-100 dark:bg-gray-700 text-gray-500 rounded-2xl font-black text-sm uppercase tracking-widest">Retour</button>
+              <button onClick={() => setSaleToCancel(null)} className="w-full py-5 bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-white rounded-2xl font-black text-sm uppercase tracking-widest active:scale-95 transition-all">Retour</button>
             </div>
           </div>
         </div>
@@ -249,7 +266,7 @@ const SalesHistory: React.FC<SalesHistoryProps> = ({ user, lang }) => {
 };
 
 const DetailRow = ({ icon, label, val, isBold = false }: any) => (
-    <div className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-2xl flex items-center gap-4">
+    <div className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-2xl flex items-center gap-4 border border-transparent dark:border-gray-700/30">
         <div className="p-3 bg-white dark:bg-gray-800 rounded-xl shadow-sm shrink-0">{icon}</div>
         <div className="min-w-0">
             <p className="text-[9px] text-gray-400 font-black uppercase tracking-widest leading-none mb-1">{label}</p>
