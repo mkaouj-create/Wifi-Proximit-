@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { LayoutDashboard, ShoppingBag, Database, ShieldCheck, ArrowRight, CheckCircle2, Wifi, Globe, Smartphone } from 'lucide-react';
+import { LayoutDashboard, ShoppingBag, Database, ShieldCheck, ArrowRight, CheckCircle2, Wifi, Globe, Smartphone, Star, Zap, CreditCard } from 'lucide-react';
 
 interface LandingPageProps {
   onLoginClick: () => void;
@@ -46,13 +46,16 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLoginClick }) => {
               onClick={onLoginClick}
               className="w-full sm:w-auto px-8 py-4 bg-primary-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-primary-700 shadow-xl shadow-primary-500/30 transition-all hover:-translate-y-1"
             >
-              Accéder à mon espace
+              Démarrer l'essai gratuit
             </button>
             <button 
-              disabled 
-              className="w-full sm:w-auto px-8 py-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-400 dark:text-gray-600 rounded-2xl font-black text-sm uppercase tracking-widest cursor-not-allowed opacity-60"
+              onClick={() => {
+                  const el = document.getElementById('pricing');
+                  el?.scrollIntoView({ behavior: 'smooth' });
+              }}
+              className="w-full sm:w-auto px-8 py-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-gray-50 dark:hover:bg-gray-700 transition-all"
             >
-              Découvrir les outils
+              Voir les tarifs
             </button>
           </div>
         </div>
@@ -89,8 +92,74 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLoginClick }) => {
         </div>
       </section>
 
+      {/* PRICING SECTION */}
+      <section id="pricing" className="py-24 px-6 overflow-hidden relative">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center mb-16 space-y-4">
+             <div className="inline-flex items-center gap-2 px-3 py-1 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-full text-[10px] font-black uppercase tracking-widest border border-indigo-100 dark:border-indigo-800 mb-2">
+                <Zap size={12} /> Tarification Flexible
+             </div>
+             <h2 className="text-4xl font-black tracking-tight dark:text-white">Des forfaits adaptés à votre croissance</h2>
+             <p className="text-gray-500 dark:text-gray-400 max-w-2xl mx-auto font-medium">
+                Commencez avec notre essai gratuit de 14 jours. Choisissez ensuite le plan qui correspond à la durée de votre exploitation.
+             </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
+            {/* PLAN STARTER */}
+            <PricingCard 
+                title="Starter"
+                price="50 000"
+                currency="GNF"
+                duration="3 Mois"
+                features={["Toutes les fonctionnalités", "Support Email", "1 Agence incluse", "Accès Mobile & Web"]}
+                onAction={onLoginClick}
+                icon={<Star className="text-amber-500" />}
+            />
+            
+            {/* PLAN PRO - MOST POPULAR */}
+            <PricingCard 
+                title="Professional"
+                price="90 000"
+                currency="GNF"
+                duration="6 Mois"
+                features={["Toutes les fonctionnalités", "Support Prioritaire", "Multi-utilisateurs", "Audit & Logs illimités"]}
+                onAction={onLoginClick}
+                isPopular
+                icon={<Zap className="text-indigo-500" />}
+            />
+
+            {/* PLAN BUSINESS */}
+            <PricingCard 
+                title="Business"
+                price="150 000"
+                currency="GNF"
+                duration="12 Mois"
+                features={["Toutes les fonctionnalités", "Support VIP 24/7", "Formation incluse", "Offre : 2 mois offerts"]}
+                onAction={onLoginClick}
+                icon={<CreditCard className="text-green-500" />}
+            />
+          </div>
+
+          <div className="mt-16 text-center">
+            <div className="inline-flex flex-col md:flex-row items-center gap-6 p-8 bg-primary-50 dark:bg-primary-900/20 rounded-[2.5rem] border border-primary-100 dark:border-primary-800">
+                <div className="w-16 h-16 bg-white dark:bg-gray-800 rounded-2xl flex items-center justify-center text-primary-600 shadow-lg">
+                    <CheckCircle2 size={32} />
+                </div>
+                <div className="text-left">
+                    <h4 className="text-lg font-black dark:text-white leading-none">Essai Gratuit "Trial"</h4>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-2 font-medium">Profitez de 14 jours d'accès complet sans carte bancaire pour tester la plateforme.</p>
+                </div>
+                <button onClick={onLoginClick} className="px-8 py-4 bg-primary-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-primary-500/30 hover:bg-primary-700 transition-all whitespace-nowrap">
+                    Démarrer l'essai
+                </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* BENEFITS SECTION */}
-      <section className="py-24 px-6">
+      <section className="py-24 px-6 bg-gray-50 dark:bg-gray-900/30">
         <div className="max-w-7xl mx-auto flex flex-col lg:flex-row items-center gap-16">
           <div className="flex-1 space-y-8">
             <h2 className="text-4xl font-black tracking-tight leading-tight">
@@ -174,6 +243,49 @@ const FeatureCard = ({ icon, title, desc, color }: any) => (
     </div>
     <h3 className="text-xl font-black mb-3 dark:text-white">{title}</h3>
     <p className="text-gray-500 text-sm leading-relaxed font-medium">{desc}</p>
+  </div>
+);
+
+const PricingCard = ({ title, price, currency, duration, features, onAction, isPopular, icon }: any) => (
+  <div className={`p-10 rounded-[3rem] flex flex-col justify-between border-2 transition-all duration-500 hover:translate-y-[-8px] relative ${isPopular ? 'bg-primary-600 text-white border-primary-500 shadow-2xl shadow-primary-600/20' : 'bg-white dark:bg-gray-800 border-gray-100 dark:border-gray-700 hover:border-primary-200 dark:hover:border-primary-800'}`}>
+    {isPopular && (
+        <div className="absolute top-0 right-10 -translate-y-1/2 px-4 py-1.5 bg-indigo-500 text-white rounded-full text-[10px] font-black uppercase tracking-widest shadow-xl">
+            Populaire
+        </div>
+    )}
+    
+    <div>
+        <div className="flex items-center gap-3 mb-6">
+            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-inner ${isPopular ? 'bg-white/10' : 'bg-gray-50 dark:bg-gray-900'}`}>
+                {icon}
+            </div>
+            <h3 className="text-xl font-black tracking-tight">{title}</h3>
+        </div>
+        
+        <div className="mb-8">
+            <div className="flex items-baseline gap-1">
+                <span className="text-4xl font-black tracking-tighter">{price}</span>
+                <span className="text-sm font-bold opacity-60 uppercase">{currency}</span>
+            </div>
+            <p className={`text-[10px] font-black uppercase tracking-widest mt-1 opacity-70`}>Valide {duration}</p>
+        </div>
+        
+        <ul className="space-y-4 mb-10">
+            {features.map((f: string, i: number) => (
+                <li key={i} className="flex items-center gap-3 text-sm font-medium">
+                    <CheckCircle2 size={18} className={isPopular ? 'text-white' : 'text-primary-500'} />
+                    <span className={isPopular ? 'opacity-90' : 'text-gray-500 dark:text-gray-400'}>{f}</span>
+                </li>
+            ))}
+        </ul>
+    </div>
+    
+    <button 
+        onClick={onAction}
+        className={`w-full py-5 rounded-2xl font-black text-xs uppercase tracking-widest transition-all active:scale-95 shadow-lg ${isPopular ? 'bg-white text-primary-600 hover:bg-gray-50' : 'bg-primary-600 text-white hover:bg-primary-700 shadow-primary-500/20'}`}
+    >
+        Choisir ce forfait
+    </button>
   </div>
 );
 

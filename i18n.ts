@@ -160,7 +160,19 @@ export const translations = {
     lastCleanup: "Dernier audit",
     cleanupNow: "Optimiser",
     cleaning: "Audit en cours...",
-    dataOptimized: "BDD Optimisée !"
+    dataOptimized: "BDD Optimisée !",
+    pricingTitle: "Des forfaits adaptés à votre croissance",
+    pricingDesc: "Choisissez la licence qui correspond à votre volume d'activité. Sans engagement, annulez quand vous voulez.",
+    freeTrial: "Essai gratuit de 14 jours",
+    starterPlan: "Starter",
+    proPlan: "Professional",
+    businessPlan: "Business",
+    unlimitedPlan: "Unlimited",
+    perMonth: "/ mois",
+    totalFor: "Total pour",
+    getStarted: "Commencer maintenant",
+    contactSales: "Contacter le support",
+    mostPopular: "Le plus populaire"
   },
   en: {
     appName: "Wifi Proximity",
@@ -319,6 +331,18 @@ export const translations = {
     lastCleanup: "Last audit",
     cleanupNow: "Optimize",
     cleaning: "Audit in progress...",
-    dataOptimized: "DB Optimized!"
+    dataOptimized: "DB Optimized!",
+    pricingTitle: "Pricing tailored for your growth",
+    pricingDesc: "Choose the license that fits your business volume. No commitment, cancel anytime.",
+    freeTrial: "14-day free trial",
+    starterPlan: "Starter",
+    proPlan: "Professional",
+    businessPlan: "Business",
+    unlimitedPlan: "Unlimited",
+    perMonth: "/ month",
+    totalFor: "Total for",
+    getStarted: "Get started now",
+    contactSales: "Contact support",
+    mostPopular: "Most popular"
   }
 };
