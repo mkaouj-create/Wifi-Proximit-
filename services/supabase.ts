@@ -1,4 +1,3 @@
-
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { 
   UserRole, 
@@ -14,8 +13,22 @@ import {
   SubscriptionPlan
 } from '../types';
 
-const supabaseUrl = process.env.VITE_SUPABASE_URL;
-const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY;
+// Safe access to environment variables with fallback
+const getEnv = (key: string) => {
+  try {
+    return (import.meta as any).env?.[key];
+  } catch (e) {
+    return undefined;
+  }
+};
+
+const supabaseUrl = getEnv('VITE_SUPABASE_URL');
+const supabaseKey = getEnv('VITE_SUPABASE_ANON_KEY');
+
+// Log pour le débogage (à retirer en production si souhaité)
+if (!supabaseUrl || !supabaseKey) {
+  console.warn("⚠️ Attention : Les clés Supabase ne sont pas détectées. Vérifiez votre fichier .env");
+}
 
 const client: SupabaseClient = createClient(
   supabaseUrl || 'https://placeholder.supabase.co',
@@ -112,9 +125,19 @@ class SupabaseService {
 
   // --- AUTH ---
   async signIn(email: string, password?: string): Promise<UserProfile | null> {
+    if (!this.isConfigured()) {
+      console.error("Supabase non configuré. Impossible de se connecter.");
+      return null;
+    }
     const { data, error } = await client.from('profiles')
       .select('*').eq('email', email).eq('password', password).single();
-    if (error || !data) return null;
+    
+    if (error) {
+      console.error("Erreur Login Supabase:", error.message);
+      return null;
+    }
+    
+    if (!data) return null;
     const user = data as UserProfile;
     localStorage.setItem('wifi_pro_session', JSON.stringify({ email, password }));
     await this.log(user, 'LOGIN', 'Connexion réussie');
