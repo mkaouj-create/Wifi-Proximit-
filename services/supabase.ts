@@ -13,33 +13,23 @@ import {
   SubscriptionPlan
 } from '../types';
 
-// SOLUTION DÉFINITIVE :
-// 1. Accès direct aux propriétés (ex: .VITE_SUPABASE_URL) requis par Vite pour le remplacement statique.
-// 2. Gestion de l'absence de 'import.meta.env' pour éviter le crash "undefined".
 const getSupabaseConfig = () => {
   try {
-    // On vérifie d'abord si import.meta et import.meta.env existent
     // @ts-ignore
     const env = (import.meta && import.meta.env ? import.meta.env : {}) as any;
-    
     return {
       url: env.VITE_SUPABASE_URL,
       key: env.VITE_SUPABASE_ANON_KEY
     };
   } catch (error) {
-    // Fallback de sécurité absolue pour éviter le crash blanc
     return { url: undefined, key: undefined };
   }
 };
 
-const { url: envUrl, key: envKey } = getSupabaseConfig();
+const { url: supabaseUrl, key: supabaseKey } = getSupabaseConfig();
 
-const supabaseUrl = envUrl;
-const supabaseKey = envKey;
-
-// Log pour le débogage
 if (!supabaseUrl || !supabaseKey) {
-  console.warn("⚠️ Mode Hors Ligne : Clés Supabase non trouvées. Vérifiez le fichier .env");
+  console.warn("Supabase non configuré.");
 }
 
 const client: SupabaseClient = createClient(
@@ -65,13 +55,13 @@ class SupabaseService {
         details, 
         created_at: new Date().toISOString()
       });
-    } catch (e) { console.error("Audit Log error:", e); }
+    } catch (e) { /* Silent fail for logs */ }
   }
 
   // --- PLANS ---
   async getSubscriptionPlans(): Promise<SubscriptionPlan[]> {
     if (!this.isConfigured()) return [];
-    const { data, error } = await client.from('subscription_plans').select('*').order('order_index');
+    const { data } = await client.from('subscription_plans').select('*').order('order_index');
     return (data as SubscriptionPlan[]) || [];
   }
 
@@ -140,19 +130,13 @@ class SupabaseService {
 
   // --- AUTH ---
   async signIn(email: string, password?: string): Promise<UserProfile | null> {
-    if (!this.isConfigured()) {
-      console.error("Supabase non configuré. Impossible de se connecter.");
-      return null;
-    }
+    if (!this.isConfigured()) return null;
+    
     const { data, error } = await client.from('profiles')
       .select('*').eq('email', email).eq('password', password).single();
     
-    if (error) {
-      console.error("Erreur Login Supabase:", error.message);
-      return null;
-    }
+    if (error || !data) return null;
     
-    if (!data) return null;
     const user = data as UserProfile;
     localStorage.setItem('wifi_pro_session', JSON.stringify({ email, password }));
     await this.log(user, 'LOGIN', 'Connexion réussie');
@@ -353,11 +337,7 @@ class SupabaseService {
     }
 
     const { data, error } = await query.select('id');
-
-    if (error) {
-      console.error("Supabase Profile Update Error:", error);
-      throw error;
-    }
+    if (error) throw error;
 
     const count = data?.length || 0;
     await this.log(actor, 'TICKET_UPDATE', `Mise à jour groupée profil ${profile} : ${price} (${count} tickets affectés)`);

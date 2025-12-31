@@ -1,5 +1,3 @@
-
-// Import React to fix namespace error for React.FC
 import React, { useState, useEffect, useMemo } from 'react';
 import { Search, User, Download, Trash2, AlertTriangle, X, Tag, Wifi, Banknote, Clock, Phone, Share2, Copy, Check, Calendar } from 'lucide-react';
 import { supabase } from '../services/supabase';
