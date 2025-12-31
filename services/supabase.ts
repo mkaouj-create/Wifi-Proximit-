@@ -46,8 +46,7 @@ class SupabaseService {
   // --- PLANS ---
   async getSubscriptionPlans(): Promise<SubscriptionPlan[]> {
     const { data, error } = await client.from('subscription_plans').select('*').order('order_index');
-    if (error) return [];
-    return data as SubscriptionPlan[];
+    return (data as SubscriptionPlan[]) || [];
   }
 
   async updateSubscriptionPlan(plan: Partial<SubscriptionPlan>, actor: UserProfile): Promise<void> {
@@ -315,7 +314,7 @@ class SupabaseService {
     }
 
     const count = data?.length || 0;
-    await this.log(actor, 'TICKET_UPDATE', `Mise à jour groupée profil ${profile} : ${price} (${count} tickets)`);
+    await this.log(actor, 'TICKET_UPDATE', `Mise à jour groupée profil ${profile} : ${price} (${count} tickets affectés)`);
     return count;
   }
 

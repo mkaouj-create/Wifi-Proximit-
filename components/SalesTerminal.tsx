@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { ShoppingCart, Phone, CheckCircle2, Share2, AlertCircle, Sparkles, Loader2, Copy, Info, Tag } from 'lucide-react';
+import { ShoppingCart, Phone, CheckCircle2, Share2, AlertCircle, Sparkles, Loader2, Copy, Info } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import { Ticket, UserProfile, TicketStatus, Agency } from '../types';
 import { translations, Language } from '../i18n';
@@ -96,9 +96,9 @@ const SalesTerminal: React.FC<SalesTerminalProps> = ({ user, lang, notify }) => 
     
     if (!win) {
       handleCopy();
-      notify('info', "Ouverture bloquée : reçu copié pour partage manuel");
+      notify('info', "Reçu copié car WhatsApp n'a pu s'ouvrir");
     } else {
-      notify('success', "Ouverture de WhatsApp...");
+      notify('success', "Partage WhatsApp en cours...");
     }
   };
 
@@ -115,7 +115,7 @@ const SalesTerminal: React.FC<SalesTerminalProps> = ({ user, lang, notify }) => 
       if (result) {
         setSoldTicketInfo(ticketToSell);
         setShowReceipt(true);
-        notify('success', 'Ticket vendu avec succès !');
+        notify('success', 'Vente réussie !');
         const updatedTickets = await supabase.getTickets(user.agency_id, user.role);
         setAvailableTickets(updatedTickets.filter(t => t.status === TicketStatus.UNSOLD));
       } else {
@@ -318,7 +318,6 @@ const SalesTerminal: React.FC<SalesTerminalProps> = ({ user, lang, notify }) => 
         )}
       </div>
 
-      {/* MODAL CONFIRMATION - BOTTOM SHEET ON MOBILE */}
       {showConfirmSale && selectedProfile && (
         <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center p-0 md:p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-300">
           <div className="bg-white dark:bg-gray-800 w-full md:max-w-sm rounded-t-[2.5rem] md:rounded-[2.5rem] p-8 md:p-10 shadow-2xl animate-in slide-in-from-bottom md:zoom-in duration-300 text-center">
@@ -351,10 +350,7 @@ const SalesTerminal: React.FC<SalesTerminalProps> = ({ user, lang, notify }) => 
               >
                 {t.confirm}
               </button>
-              <button 
-                onClick={() => setShowConfirmSale(false)}
-                className="w-full py-5 bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white rounded-2xl font-black text-sm uppercase tracking-widest active:scale-95 transition-all"
-              >
+              <button onClick={() => setShowConfirmSale(false)} className="w-full py-5 bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white rounded-2xl font-black text-sm uppercase tracking-widest active:scale-95 transition-all">
                 {t.cancel}
               </button>
             </div>
