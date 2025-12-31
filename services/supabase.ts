@@ -296,27 +296,24 @@ class SupabaseService {
   async updateTicketPrice(id: string, price: number): Promise<void> { await client.from('tickets').update({ price }).eq('id', id); }
 
   async updateProfilePrices(aid: string | null, profile: string, price: number, actor: UserProfile): Promise<number> {
-    // Construction de la requête de base
     let query = client.from('tickets')
       .update({ price })
       .eq('profile', profile)
       .eq('status', TicketStatus.UNSOLD);
-    
-    // Filtrage strict selon les permissions
+
     if (actor.role !== UserRole.SUPER_ADMIN) {
       query = query.eq('agency_id', actor.agency_id);
     } else if (aid && aid !== 'ALL') {
       query = query.eq('agency_id', aid);
     }
-    
-    // Crucial : demander les IDs pour savoir combien de lignes ont été réellement modifiées
+
     const { data, error } = await query.select('id');
-    
+
     if (error) {
       console.error("Supabase Profile Update Error:", error);
       throw error;
     }
-    
+
     const count = data?.length || 0;
     await this.log(actor, 'TICKET_UPDATE', `Mise à jour groupée profil ${profile} : ${price} (${count} tickets)`);
     return count;

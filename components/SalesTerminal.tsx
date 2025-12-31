@@ -58,7 +58,7 @@ const SalesTerminal: React.FC<SalesTerminalProps> = ({ user, lang, notify }) => 
     try {
       if (navigator.clipboard && window.isSecureContext) {
         await navigator.clipboard.writeText(text);
-        notify('success', 'Code copié avec succès');
+        notify('success', 'Reçu copié dans le presse-papier');
       } else {
         const textArea = document.createElement("textarea");
         textArea.value = text;
@@ -68,9 +68,9 @@ const SalesTerminal: React.FC<SalesTerminalProps> = ({ user, lang, notify }) => 
         document.body.appendChild(textArea);
         textArea.focus();
         textArea.select();
-        document.execCommand('copy');
+        const successful = document.execCommand('copy');
         document.body.removeChild(textArea);
-        notify('success', 'Code copié (fallback)');
+        if (successful) notify('success', 'Reçu copié (fallback)');
       }
     } catch (err) {
       notify('error', 'Échec de la copie');
@@ -83,25 +83,22 @@ const SalesTerminal: React.FC<SalesTerminalProps> = ({ user, lang, notify }) => 
     
     let url = "";
     if (!phone) {
-        // Lien direct sans numéro spécifique
         url = `https://wa.me/?text=${encodedMessage}`;
     } else {
-        // Nettoyage et formatage du numéro
         let cleanPhone = phone.replace(/\D/g, '').replace(/^0+/, '');
-        // Default indicatif Guinée si format local 9 chiffres
         if (cleanPhone.length === 9 && currency === 'GNF') {
             cleanPhone = '224' + cleanPhone;
         }
         url = `https://wa.me/${cleanPhone}?text=${encodedMessage}`;
     }
     
-    // Tentative d'ouverture directe
     const win = window.open(url, '_blank', 'noopener,noreferrer');
     
-    // Si l'ouverture échoue (bloqué par popup ou WebView restrictif), on copie au presse-papier
     if (!win) {
       handleCopy();
-      notify('info', "Lien copié car WhatsApp n'a pu s'ouvrir");
+      notify('info', "Ouverture bloquée : reçu copié pour partage manuel");
+    } else {
+      notify('success', "Ouverture de WhatsApp...");
     }
   };
 
@@ -118,14 +115,14 @@ const SalesTerminal: React.FC<SalesTerminalProps> = ({ user, lang, notify }) => 
       if (result) {
         setSoldTicketInfo(ticketToSell);
         setShowReceipt(true);
-        notify('success', 'Transaction validée !');
+        notify('success', 'Ticket vendu avec succès !');
         const updatedTickets = await supabase.getTickets(user.agency_id, user.role);
         setAvailableTickets(updatedTickets.filter(t => t.status === TicketStatus.UNSOLD));
       } else {
-        notify('error', 'Ticket non disponible.');
+        notify('error', 'Le ticket sélectionné n\'est plus disponible.');
       }
     } catch (err) {
-      notify('error', "Échec de la vente.");
+      notify('error', "Une erreur est survenue lors de la vente.");
     } finally {
       setIsSelling(false);
     }
