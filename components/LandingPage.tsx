@@ -1,12 +1,31 @@
 
-import React from 'react';
-import { LayoutDashboard, ShoppingBag, Database, ShieldCheck, ArrowRight, CheckCircle2, Wifi, Globe, Smartphone, Star, Zap, CreditCard } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { LayoutDashboard, ShoppingBag, Database, ShieldCheck, ArrowRight, CheckCircle2, Wifi, Globe, Smartphone, Star, Zap, CreditCard, Loader2 } from 'lucide-react';
+import { supabase } from '../services/supabase';
+import { SubscriptionPlan } from '../types';
 
 interface LandingPageProps {
   onLoginClick: () => void;
 }
 
 const LandingPage: React.FC<LandingPageProps> = ({ onLoginClick }) => {
+  const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchPlans = async () => {
+        try {
+            const data = await supabase.getSubscriptionPlans();
+            setPlans(data);
+        } catch (e) {
+            console.error("Erreur lors de la récupération des plans.");
+        } finally {
+            setLoading(false);
+        }
+    };
+    fetchPlans();
+  }, []);
+
   return (
     <div className="min-h-screen bg-white dark:bg-gray-950 font-inter text-gray-900 dark:text-gray-100 selection:bg-primary-100 selection:text-primary-700">
       
@@ -105,41 +124,28 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLoginClick }) => {
              </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
-            {/* PLAN STARTER */}
-            <PricingCard 
-                title="Starter"
-                price="50 000"
-                currency="GNF"
-                duration="3 Mois"
-                features={["Toutes les fonctionnalités", "Support Email", "1 Agence incluse", "Accès Mobile & Web"]}
-                onAction={onLoginClick}
-                icon={<Star className="text-amber-500" />}
-            />
-            
-            {/* PLAN PRO - MOST POPULAR */}
-            <PricingCard 
-                title="Professional"
-                price="90 000"
-                currency="GNF"
-                duration="6 Mois"
-                features={["Toutes les fonctionnalités", "Support Prioritaire", "Multi-utilisateurs", "Audit & Logs illimités"]}
-                onAction={onLoginClick}
-                isPopular
-                icon={<Zap className="text-indigo-500" />}
-            />
-
-            {/* PLAN BUSINESS */}
-            <PricingCard 
-                title="Business"
-                price="150 000"
-                currency="GNF"
-                duration="12 Mois"
-                features={["Toutes les fonctionnalités", "Support VIP 24/7", "Formation incluse", "Offre : 2 mois offerts"]}
-                onAction={onLoginClick}
-                icon={<CreditCard className="text-green-500" />}
-            />
-          </div>
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-20 gap-4">
+                <Loader2 className="animate-spin text-primary-600" size={40} />
+                <p className="text-xs font-black uppercase tracking-widest opacity-40 text-gray-400">Récupération des offres...</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
+                {plans.map(plan => (
+                    <PricingCard 
+                        key={plan.id}
+                        title={plan.name}
+                        price={plan.price.toLocaleString()}
+                        currency={plan.currency}
+                        duration={`${plan.months} Mois`}
+                        features={plan.features}
+                        onAction={onLoginClick}
+                        isPopular={plan.is_popular}
+                        icon={plan.name.toLowerCase().includes('starter') ? <Star className="text-amber-500" /> : plan.is_popular ? <Zap className="text-indigo-500" /> : <CreditCard className="text-green-500" />}
+                    />
+                ))}
+            </div>
+          )}
 
           <div className="mt-16 text-center">
             <div className="inline-flex flex-col md:flex-row items-center gap-6 p-8 bg-primary-50 dark:bg-primary-900/20 rounded-[2.5rem] border border-primary-100 dark:border-primary-800">

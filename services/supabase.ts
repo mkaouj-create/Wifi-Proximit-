@@ -11,7 +11,8 @@ import {
   AgencyModules, 
   AgencyStatus, 
   CreditTransaction,
-  AgencySettings 
+  AgencySettings,
+  SubscriptionPlan
 } from '../types';
 
 const getEnvVar = (name: string): string => {
@@ -29,14 +30,12 @@ const client: SupabaseClient = createClient(
 );
 
 const TICKET_CREDIT_RATIO = 20; 
-const FREE_TICKET_LIMIT = 50;   
 
 class SupabaseService {
   public isConfigured(): boolean {
     return !!supabaseUrl && !supabaseUrl.includes('placeholder');
   }
 
-  // --- REALTIME ---
   public subscribeToChanges(table: string, callback: (payload: any) => void) {
     return client
       .channel('public-changes')
@@ -56,6 +55,27 @@ class SupabaseService {
         created_at: new Date().toISOString()
       });
     } catch (e) { console.error("Audit Log error:", e); }
+  }
+
+  // --- PLANS D'ABONNEMENT ---
+  async getSubscriptionPlans(): Promise<SubscriptionPlan[]> {
+    const { data, error } = await client.from('subscription_plans').select('*').order('order_index');
+    if (error) {
+      console.warn("Table subscription_plans non trouvée, utilisation des données par défaut.");
+      return [
+        { id: '1', name: 'Starter', months: 3, price: 50000, currency: 'GNF', features: ['1 Agence', 'Support Email'], is_popular: false, order_index: 0 },
+        { id: '2', name: 'Professional', months: 6, price: 90000, currency: 'GNF', features: ['Multi-vendeurs', 'Support Pro'], is_popular: true, order_index: 1 },
+        { id: '3', name: 'Business', months: 12, price: 150000, currency: 'GNF', features: ['Tout illimité', 'Support VIP'], is_popular: false, order_index: 2 }
+      ];
+    }
+    return data as SubscriptionPlan[];
+  }
+
+  async updateSubscriptionPlan(plan: Partial<SubscriptionPlan>, actor: UserProfile): Promise<void> {
+    if (actor.role !== UserRole.SUPER_ADMIN) throw new Error("Accès refusé");
+    const { error } = await client.from('subscription_plans').upsert(plan);
+    if (error) throw error;
+    await this.log(actor, 'PLAN_UPDATE', `Plan ${plan.name} mis à jour`);
   }
 
   // --- ABONNEMENT ---
@@ -140,7 +160,6 @@ class SupabaseService {
     };
   }
 
-  // --- TICKETS & VENTES ---
   async sellTicket(tid: string, sid: string, aid: string, phone?: string): Promise<Sale | null> {
     const { data: agency } = await client.from('agencies').select('*').eq('id', aid).single();
     if (!this.isSubscriptionActive(agency)) throw new Error("Abonnement expiré.");
@@ -204,7 +223,6 @@ class SupabaseService {
     });
   }
 
-  // --- GETTERS ---
   async getAgencies(): Promise<Agency[]> { 
     const { data } = await client.from('agencies').select('*').order('name'); 
     return (data as Agency[]) || [];
@@ -241,12 +259,10 @@ class SupabaseService {
     return (data as ActivityLog[]) || [];
   }
 
-  // --- UPDATERS ---
   async updateAgency(id: string, name: string, settings: Partial<AgencySettings>): Promise<void> {
     await client.from('agencies').update({ name, settings }).eq('id', id);
   }
 
-  // Fix: Added missing updateAgencyModules method
   async updateAgencyModules(id: string, modules: AgencyModules, actor: UserProfile): Promise<void> {
     const { data: agency } = await client.from('agencies').select('settings').eq('id', id).single();
     const settings = { ...(agency?.settings || {}), modules };
@@ -262,7 +278,6 @@ class SupabaseService {
     await client.from('profiles').insert({ ...userData, display_name: userData.email.split('@')[0] });
   }
 
-  // Fix: Added missing updateUserRole method
   async updateUserRole(uid: string, role: UserRole): Promise<void> {
     const { error } = await client.from('profiles').update({ role }).eq('id', uid);
     if (error) throw error;

@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
-import { Building2, Plus, Edit3, X, Search, Loader2, ShieldCheck, Coins, ToggleLeft, ToggleRight, Power, PowerOff, Save, Calendar, Star, FileText, Clock, AlertTriangle } from 'lucide-react';
+import { Building2, Plus, Edit3, X, Search, Loader2, ShieldCheck, Coins, ToggleLeft, ToggleRight, Power, PowerOff, Save, Calendar, Star, FileText, Clock, AlertTriangle, Settings2, Trash2, Check } from 'lucide-react';
 import { supabase } from '../services/supabase';
-import { Agency, UserProfile, AgencyStatus, AgencyModules } from '../types';
+import { Agency, UserProfile, AgencyStatus, AgencyModules, SubscriptionPlan } from '../types';
 import { translations, Language } from '../i18n';
 
 interface AgencyManagerProps {
@@ -20,20 +20,20 @@ const MODULE_OPTIONS: { key: keyof AgencyModules; label: string; desc: string }[
   { key: 'tasks', label: 'Tâches & Logs', desc: 'Audit et suivi des tâches' },
 ];
 
-const PLAN_OPTIONS = [
-  { name: 'Starter', months: 3, price: '50 000 FG' },
-  { name: 'Professional', months: 6, price: '90 000 FG' },
-  { name: 'Business', months: 12, price: '150 000 FG' },
-];
-
 const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang, notify }) => {
   const [agencies, setAgencies] = useState<Agency[]>([]);
+  const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [showAdd, setShowAdd] = useState(false);
+  const [showPlansEditor, setShowPlansEditor] = useState(false);
   const [agencyToManage, setAgencyToManage] = useState<Agency | null>(null);
   const [agencyToRecharge, setAgencyToRecharge] = useState<Agency | null>(null);
   const [agencyToSubscribe, setAgencyToSubscribe] = useState<Agency | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [search, setSearch] = useState('');
+  
+  // States for Plan Editor
+  const [editingPlan, setEditingPlan] = useState<Partial<SubscriptionPlan> | null>(null);
+
   const [rechargeAmount, setRechargeAmount] = useState('10');
   const [rechargeDesc, setRechargeDesc] = useState('Recharge manuelle');
   const [selectedModules, setSelectedModules] = useState<AgencyModules>({
@@ -41,7 +41,10 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang, notify }) => 
   });
   const t = translations[lang];
 
-  useEffect(() => { loadAgencies(); }, []);
+  useEffect(() => { 
+    loadAgencies();
+    loadPlans();
+  }, []);
 
   useEffect(() => {
     if (agencyToManage) {
@@ -58,6 +61,11 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang, notify }) => 
     } catch (e) {
       notify('error', "Erreur de chargement des agences.");
     }
+  };
+
+  const loadPlans = async () => {
+    const data = await supabase.getSubscriptionPlans();
+    setPlans(data);
   };
 
   const getDaysRemaining = (endDate: string) => {
@@ -82,6 +90,21 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang, notify }) => 
     }
   };
 
+  const handleSavePlan = async () => {
+    if (!editingPlan || isProcessing) return;
+    setIsProcessing(true);
+    try {
+        await supabase.updateSubscriptionPlan(editingPlan as SubscriptionPlan, user);
+        notify('success', "Forfait enregistré avec succès.");
+        setEditingPlan(null);
+        loadPlans();
+    } catch (e) {
+        notify('error', "Erreur lors de la sauvegarde du forfait.");
+    } finally {
+        setIsProcessing(false);
+    }
+  };
+
   const handleRecharge = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!agencyToRecharge || isProcessing) return;
@@ -97,18 +120,15 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang, notify }) => 
       await supabase.addCredits(agencyToRecharge.id, amount, user.id, rechargeDesc);
       notify('success', `${amount} crédits ajoutés avec succès.`);
       setAgencyToRecharge(null);
-      setRechargeAmount('10');
-      setRechargeDesc('Recharge manuelle');
       await loadAgencies();
     } catch (e: any) {
-      notify('error', "Échec du rechargement. Vérifiez les permissions.");
-      console.error(e);
+      notify('error', "Échec du rechargement.");
     } finally {
       setIsProcessing(false);
     }
   };
 
-  const handleActivateSubscription = async (plan: any) => {
+  const handleActivateSubscription = async (plan: SubscriptionPlan) => {
     if (!agencyToSubscribe || isProcessing) return;
     setIsProcessing(true);
     try {
@@ -154,9 +174,14 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang, notify }) => 
           <h2 className="text-3xl font-black text-gray-900 dark:text-white leading-none tracking-tight">Gestion des Agences</h2>
           <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest mt-2">SaaS & Licences Partenaires</p>
         </div>
-        <button onClick={() => setShowAdd(true)} className="flex items-center justify-center gap-3 bg-primary-600 text-white px-6 py-4 rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl shadow-primary-500/30 active:scale-95 transition-all">
-          <Plus className="w-5 h-5" /> Ajouter Agence
-        </button>
+        <div className="flex gap-2">
+            <button onClick={() => setShowPlansEditor(true)} className="flex items-center justify-center gap-3 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 px-6 py-4 rounded-2xl text-xs font-black uppercase tracking-widest active:scale-95 transition-all border dark:border-gray-700">
+                <Settings2 className="w-5 h-5" /> Config. Offres
+            </button>
+            <button onClick={() => setShowAdd(true)} className="flex items-center justify-center gap-3 bg-primary-600 text-white px-6 py-4 rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl shadow-primary-500/30 active:scale-95 transition-all">
+                <Plus className="w-5 h-5" /> Ajouter Agence
+            </button>
+        </div>
       </div>
 
       {/* Search */}
@@ -241,6 +266,78 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang, notify }) => 
         })}
       </div>
 
+      {/* MODALE EDITEUR DE PLANS (SUPER ADMIN) */}
+      {showPlansEditor && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-300">
+          <div className="bg-white dark:bg-gray-800 w-full max-w-4xl rounded-[3rem] p-10 shadow-2xl animate-in zoom-in duration-300 border dark:border-gray-700 overflow-hidden flex flex-col max-h-[90vh]">
+             <div className="flex items-center justify-between mb-8 shrink-0">
+                <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 rounded-2xl flex items-center justify-center"><Settings2 className="w-6 h-6" /></div>
+                    <div><h3 className="text-2xl font-black dark:text-white leading-tight">Configuration des Forfaits</h3><p className="text-[10px] text-gray-400 font-black uppercase tracking-widest">Contrôle des tarifs publics</p></div>
+                </div>
+                <button onClick={() => setShowPlansEditor(false)} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full dark:text-white transition-colors"><X size={24} /></button>
+             </div>
+
+             <div className="flex-1 overflow-y-auto no-scrollbar space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {plans.map(plan => (
+                        <div key={plan.id} className="p-6 bg-gray-50 dark:bg-gray-900/50 rounded-[2rem] border dark:border-gray-800 flex items-center justify-between group">
+                            <div>
+                                <p className="font-black text-lg dark:text-white">{plan.name}</p>
+                                <p className="text-xs text-indigo-600 font-bold">{plan.price.toLocaleString()} {plan.currency} / {plan.months} Mois</p>
+                            </div>
+                            <button onClick={() => setEditingPlan(plan)} className="p-3 bg-white dark:bg-gray-800 rounded-xl text-gray-400 group-hover:text-primary-500 transition-all border dark:border-gray-700 shadow-sm"><Edit3 size={18} /></button>
+                        </div>
+                    ))}
+                    <button onClick={() => setEditingPlan({ name: '', price: 0, months: 1, currency: 'GNF', features: [], order_index: plans.length })} className="p-6 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-[2rem] flex items-center justify-center gap-3 text-gray-400 hover:border-primary-500 hover:text-primary-500 transition-all">
+                        <Plus size={20} /> <span className="font-black uppercase text-xs">Nouveau Forfait</span>
+                    </button>
+                </div>
+             </div>
+
+             {editingPlan && (
+                <div className="absolute inset-0 z-10 bg-white dark:bg-gray-800 p-10 animate-in slide-in-from-right duration-300">
+                    <div className="flex items-center gap-4 mb-8">
+                        <button onClick={() => setEditingPlan(null)} className="p-2 bg-gray-100 dark:bg-gray-700 rounded-xl"><X size={20} /></button>
+                        <h4 className="text-xl font-black uppercase">Éditer Forfait</h4>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Nom du Plan</label>
+                            <input type="text" className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-xl font-bold border-none" value={editingPlan.name} onChange={e => setEditingPlan({...editingPlan, name: e.target.value})} />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Durée (Mois)</label>
+                            <input type="number" className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-xl font-bold border-none" value={editingPlan.months} onChange={e => setEditingPlan({...editingPlan, months: parseInt(e.target.value)})} />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Tarif</label>
+                            <input type="number" className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-xl font-bold border-none" value={editingPlan.price} onChange={e => setEditingPlan({...editingPlan, price: parseInt(e.target.value)})} />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Devise</label>
+                            <input type="text" className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-xl font-bold border-none" value={editingPlan.currency} onChange={e => setEditingPlan({...editingPlan, currency: e.target.value})} />
+                        </div>
+                        <div className="md:col-span-2 space-y-2">
+                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Points Forts (Séparés par une virgule)</label>
+                            <textarea className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-xl font-bold border-none" rows={3} value={editingPlan.features?.join(', ')} onChange={e => setEditingPlan({...editingPlan, features: e.target.value.split(',').map(f => f.trim())})} />
+                        </div>
+                    </div>
+
+                    <div className="mt-10 flex gap-4">
+                        <button onClick={() => setEditingPlan(null)} className="flex-1 py-5 bg-gray-100 dark:bg-gray-700 rounded-2xl font-black uppercase text-xs">Annuler</button>
+                        <button onClick={handleSavePlan} className="flex-1 py-5 bg-primary-600 text-white rounded-2xl font-black uppercase text-xs flex items-center justify-center gap-3">
+                            {isProcessing ? <Loader2 className="animate-spin" /> : <Save size={18} />}
+                            Sauvegarder
+                        </button>
+                    </div>
+                </div>
+             )}
+          </div>
+        </div>
+      )}
+
       {/* MODALE RECHARGE CRÉDITS */}
       {agencyToRecharge && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-300">
@@ -310,7 +407,7 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang, notify }) => 
         </div>
       )}
 
-      {/* Modale Abonnement */}
+      {/* Modale Abonnement - Dynamisée */}
       {agencyToSubscribe && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xl animate-in fade-in duration-300">
           <div className="bg-white dark:bg-gray-800 w-full max-w-lg rounded-[3rem] p-10 shadow-2xl animate-in zoom-in duration-300">
@@ -323,9 +420,9 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang, notify }) => 
              </div>
 
              <div className="space-y-3 mb-10">
-                {PLAN_OPTIONS.map(plan => (
+                {plans.map(plan => (
                     <button 
-                        key={plan.name}
+                        key={plan.id}
                         disabled={isProcessing}
                         onClick={() => handleActivateSubscription(plan)}
                         className="w-full p-6 bg-gray-50 dark:bg-gray-900 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 border-2 border-transparent hover:border-indigo-500 rounded-[1.5rem] flex items-center justify-between transition-all group disabled:opacity-50"
@@ -335,7 +432,7 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, lang, notify }) => 
                             <p className="text-[10px] text-gray-400 font-bold uppercase">{plan.months} Mois de validité</p>
                         </div>
                         <div className="text-right">
-                            <p className="font-black text-indigo-600">{plan.price}</p>
+                            <p className="font-black text-indigo-600">{plan.price.toLocaleString()} {plan.currency}</p>
                             <p className="text-[9px] text-gray-400 uppercase">Usage illimité</p>
                         </div>
                     </button>

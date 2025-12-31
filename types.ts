@@ -15,6 +15,18 @@ export enum TicketStatus {
 export type AgencyStatus = 'active' | 'inactive';
 export type SubscriptionStatus = 'active' | 'expired' | 'trial';
 
+export interface SubscriptionPlan {
+  id: string;
+  name: string;
+  months: number;
+  price: number;
+  currency: string;
+  features: string[];
+  is_popular: boolean;
+  order_index: number;
+  created_at?: string;
+}
+
 export interface AgencyModules {
   dashboard: boolean;
   sales: boolean;
@@ -93,7 +105,6 @@ export interface Agency {
   owner_id?: string;
   credits_balance: number;
   settings?: AgencySettings;
-  // Nouveaux champs d'abonnement
   plan_name: string;
   subscription_start: string;
   subscription_end: string;
