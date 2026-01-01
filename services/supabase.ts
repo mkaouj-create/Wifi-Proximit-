@@ -155,7 +155,6 @@ class SupabaseService {
     if (error || !data) return null;
     
     const user = data as UserProfile;
-    // Note: Stocker le mot de passe en local n'est pas idéal, mais respecte l'architecture existante demandée.
     localStorage.setItem('wifi_pro_session', JSON.stringify({ email, password }));
     await this.log(user, 'LOGIN', 'Connexion réussie');
     return user;
@@ -224,27 +223,23 @@ class SupabaseService {
     const { data: agency } = await client.from('agencies').select('subscription_end, settings').eq('id', aid).single();
     if (!this.isSubscriptionActive(agency as Partial<Agency>)) throw new Error("Abonnement expiré.");
 
-    // Transaction atomique simulée : on vérifie d'abord la disponibilité
     const { data: tk } = await client.from('tickets').select('*').eq('id', tid).eq('status', TicketStatus.UNSOLD).single();
     if (!tk) return null;
 
     const now = new Date().toISOString();
     
-    // Mise à jour ticket
     const { error: updateError } = await client.from('tickets')
         .update({ status: TicketStatus.SOLD, sold_by: sid, sold_at: now })
         .eq('id', tid)
-        .eq('status', TicketStatus.UNSOLD); // Double check pour la concurrence
+        .eq('status', TicketStatus.UNSOLD);
 
     if (updateError) return null;
 
-    // Création vente
     const { data: sale, error: saleError } = await client.from('sales').insert({ 
       ticket_id: tid, agency_id: aid, seller_id: sid, amount: tk.price, sold_at: now, customer_phone: phone 
     }).select().single();
 
     if (saleError) {
-        // Rollback manuel si la vente échoue (très rare)
         await client.from('tickets').update({ status: TicketStatus.UNSOLD, sold_by: null, sold_at: null }).eq('id', tid);
         throw saleError;
     }
@@ -273,7 +268,6 @@ class SupabaseService {
     const { error } = await client.from('tickets').insert(toInsert);
     if (error) throw error;
 
-    // Débit crédits
     await client.from('agencies').update({ 
       credits_balance: agency.credits_balance - cost,
       settings: { ...agency.settings, total_tickets_ever: (agency.settings?.total_tickets_ever || 0) + toInsert.length }
@@ -305,8 +299,6 @@ class SupabaseService {
     let q = client.from('sales').select('*, profiles:seller_id(display_name), tickets:ticket_id(username, profile, time_limit)');
     if (role !== UserRole.SUPER_ADMIN) q = q.eq('agency_id', aid);
     const { data } = await q.order('sold_at', { ascending: false });
-    
-    // Mapping pour aplatir la structure jointe
     return (data || []).map((s: any) => ({ 
       ...s, 
       seller_name: s.profiles?.display_name, 
@@ -334,45 +326,53 @@ class SupabaseService {
 
   // --- SÉCURITÉ & RESTRICTIONS ---
 
-  async updateAgency(id: string, name: string, settings: Partial<AgencySettings>, actor?: UserProfile): Promise<void> {
-    // Restriction Vendeur
+  async updateAgency(id: string, name: string, settingsUpdate: Partial<AgencySettings>, actor?: UserProfile): Promise<void> {
     if (actor && actor.role === UserRole.SELLER) throw new Error("Accès interdit aux vendeurs.");
     
-    await client.from('agencies').update({ name, settings }).eq('id', id);
-    if(actor) await this.log(actor, 'AGENCY_UPDATE', `Mise à jour paramètres agence`);
+    // 1. Récupérer les settings actuels pour ne pas les écraser
+    const { data: currentAgency } = await client.from('agencies').select('settings').eq('id', id).single();
+    const currentSettings = currentAgency?.settings || {};
+
+    // 2. Fusionner les nouveaux settings
+    const mergedSettings = { ...currentSettings, ...settingsUpdate };
+
+    // 3. Update
+    const { error } = await client.from('agencies').update({ name, settings: mergedSettings }).eq('id', id);
+    
+    if (error) throw error;
+    if (actor) await this.log(actor, 'AGENCY_UPDATE', `Mise à jour paramètres agence`);
   }
 
   async updateAgencyModules(id: string, modules: AgencyModules, actor: UserProfile): Promise<void> {
     if (actor.role === UserRole.SELLER) throw new Error("Accès interdit.");
     
     const { data: agency } = await client.from('agencies').select('settings').eq('id', id).single();
-    await client.from('agencies').update({ settings: { ...(agency?.settings || {}), modules } }).eq('id', id);
+    const currentSettings = agency?.settings || {};
+    
+    await client.from('agencies').update({ settings: { ...currentSettings, modules } }).eq('id', id);
     await this.log(actor, 'AGENCY_MODULES', `Modules mis à jour pour ${id}`);
   }
 
   async setAgencyStatus(id: string, status: AgencyStatus, actor: UserProfile): Promise<void> {
+    if (actor.role !== UserRole.SUPER_ADMIN) throw new Error("Accès refusé.");
     await client.from('agencies').update({ status }).eq('id', id);
     await this.log(actor, 'AGENCY_STATUS', `Agence ${id} -> ${status}`);
   }
 
   async addUser(userData: any): Promise<void> { 
-    // TODO: Dans une app réelle, vérifier ici si l'acteur a le droit de créer un user
-    await client.from('profiles').insert({ ...userData, display_name: userData.email.split('@')[0] });
+    // Vérifier unicité email manuellement (simule contrainte unique si non définie en DB)
+    const { data: existing } = await client.from('profiles').select('id').eq('email', userData.email).single();
+    if (existing) throw new Error("Cet email est déjà utilisé.");
+
+    const { error } = await client.from('profiles').insert({ ...userData, display_name: userData.email.split('@')[0] });
+    if (error) throw error;
   }
 
   async updateUserRole(uid: string, role: UserRole): Promise<void> {
     await client.from('profiles').update({ role }).eq('id', uid);
   }
 
-  /**
-   * Modifie le mot de passe d'un utilisateur.
-   * Règles : 
-   * 1. Un utilisateur peut modifier son propre mot de passe.
-   * 2. Un Admin/SuperAdmin peut modifier le mot de passe d'autrui.
-   * 3. Un Vendeur NE PEUT PAS modifier le mot de passe d'un autre utilisateur.
-   */
   async updatePassword(uid: string, password: string, actor: UserProfile): Promise<boolean> { 
-    // Vérification stricte des permissions
     const isSelf = uid === actor.id;
     const isAuthorized = actor.role === UserRole.SUPER_ADMIN || actor.role === UserRole.ADMIN;
 
@@ -388,23 +388,15 @@ class SupabaseService {
     return true; 
   }
 
-  /**
-   * Modifie l'email d'un utilisateur.
-   * Réservé aux Admins et Super Admins.
-   */
   async updateUserEmail(uid: string, newEmail: string, actor: UserProfile): Promise<boolean> {
-    if (actor.role === UserRole.SELLER) {
-        console.error("Les vendeurs ne peuvent pas modifier les emails.");
-        return false;
-    }
+    if (actor.role === UserRole.SELLER) return false;
 
-    // Vérification d'unicité (optionnel mais recommandé, ici on laisse la DB renvoyer une erreur si contrainte unique)
+    // Vérif unicité
+    const { data: existing } = await client.from('profiles').select('id').eq('email', newEmail).single();
+    if (existing && existing.id !== uid) return false; // Email pris par un autre
+
     const { error } = await client.from('profiles').update({ email: newEmail }).eq('id', uid);
-    
-    if (error) {
-        console.error("Erreur mise à jour email:", error);
-        return false;
-    }
+    if (error) return false;
 
     await this.log(actor, 'USER_UPDATE', `Email modifié pour l'utilisateur ${uid}`);
     return true;

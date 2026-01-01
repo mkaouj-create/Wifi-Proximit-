@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { UserPlus, User, Shield, Mail, Edit3, X, Check, Building2, Lock, KeyRound, AlertTriangle, Key } from 'lucide-react';
+import { UserPlus, User, Shield, Mail, Edit3, X, Check, Building2, Lock, KeyRound, AlertTriangle, Key, Loader2 } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import { UserProfile, UserRole, Agency } from '../types';
 import { translations, Language } from '../i18n';
@@ -13,6 +13,8 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [agencies, setAgencies] = useState<Agency[]>([]);
   const [showAdd, setShowAdd] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
   
   // États d'édition unifiés
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
@@ -38,14 +40,19 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
   }, []);
 
   const loadData = async () => {
-    const [userData, agencyData] = await Promise.all([
-      supabase.getUsers(user.agency_id, user.role),
-      supabase.getAgencies()
-    ]);
-    
-    const safeUsers = isSuperAdmin ? userData : userData.filter(u => u.role !== UserRole.SUPER_ADMIN);
-    setUsers(safeUsers);
-    setAgencies(agencyData.filter(a => a.status === 'active'));
+    setLoading(true);
+    try {
+        const [userData, agencyData] = await Promise.all([
+          supabase.getUsers(user.agency_id, user.role),
+          supabase.getAgencies()
+        ]);
+        
+        const safeUsers = isSuperAdmin ? userData : userData.filter(u => u.role !== UserRole.SUPER_ADMIN);
+        setUsers(safeUsers);
+        setAgencies(agencyData.filter(a => a.status === 'active'));
+    } finally {
+        setLoading(false);
+    }
   };
 
   const getAgencyName = (id: string) => agencies.find(a => a.id === id)?.name || 'Inconnue';
@@ -55,10 +62,10 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
     // Un vendeur ne peut rien modifier
     if (user.role === UserRole.SELLER) return false;
     
-    // Un Super Admin peut tout modifier (sauf peut-être lui-même dans cette vue pour éviter de se bloquer)
-    if (isSuperAdmin) return true;
+    // Un Super Admin peut tout modifier (sauf lui-même ici pour éviter verrouillage accidentel)
+    if (isSuperAdmin) return user.id !== target.id;
     
-    // Un Admin peut modifier les Vendeurs de SON agence
+    // Un Admin peut modifier les Vendeurs de SON agence, mais pas les autres Admins
     if (user.role === UserRole.ADMIN && target.role === UserRole.SELLER && target.agency_id === user.agency_id) return true;
     
     return false;
@@ -73,14 +80,23 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
 
   const executeAddUser = async () => {
     setConfirmAction(null);
-    const roleToAssign = (newRole === UserRole.SUPER_ADMIN && !isSuperAdmin) ? UserRole.SELLER : newRole;
+    setActionLoading(true);
+    try {
+        const roleToAssign = (newRole === UserRole.SUPER_ADMIN && !isSuperAdmin) ? UserRole.SELLER : newRole;
 
-    await supabase.addUser({ 
-      email: newEmail, password: newPassword, pin: newPin, role: roleToAssign, agency_id: targetAgencyId 
-    });
-    setNewEmail(''); setNewPassword(''); setNewPin('');
-    setShowAdd(false);
-    loadData();
+        await supabase.addUser({ 
+          email: newEmail, password: newPassword, pin: newPin, role: roleToAssign, agency_id: targetAgencyId 
+        });
+        
+        setNewEmail(''); setNewPassword(''); setNewPin('');
+        setShowAdd(false);
+        await loadData();
+        alert("Utilisateur ajouté avec succès.");
+    } catch (e: any) {
+        alert("Erreur: " + (e.message || "Impossible de créer l'utilisateur (Email déjà pris ?)"));
+    } finally {
+        setActionLoading(false);
+    }
   };
 
   const openEditModal = (u: UserProfile) => {
@@ -98,21 +114,35 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
     setConfirmAction(null);
     if (!editingUser) return;
     
-    // 1. Mise à jour du rôle
-    if (editRole !== editingUser.role) {
-        await supabase.updateUserRole(editingUser.id, editRole);
-    }
-    
-    // 2. Mise à jour de l'email (si changé)
-    if (editEmail !== editingUser.email) {
-        const success = await supabase.updateUserEmail(editingUser.id, editEmail, user);
-        if (!success) {
-            alert("Erreur lors de la mise à jour de l'email. Vérifiez vos permissions ou si l'email existe déjà.");
+    setActionLoading(true);
+    try {
+        let needsRefresh = false;
+        
+        // 1. Mise à jour du rôle
+        if (editRole !== editingUser.role) {
+            await supabase.updateUserRole(editingUser.id, editRole);
+            needsRefresh = true;
         }
+        
+        // 2. Mise à jour de l'email (si changé)
+        if (editEmail !== editingUser.email) {
+            const success = await supabase.updateUserEmail(editingUser.id, editEmail, user);
+            if (!success) {
+                alert("Erreur: Cet email est déjà utilisé ou vous n'avez pas la permission.");
+                return; // On arrête ici si l'email échoue
+            }
+            needsRefresh = true;
+        }
+        
+        if(needsRefresh) {
+            setEditingUser(null);
+            await loadData();
+        }
+    } catch(e) {
+        alert("Une erreur technique est survenue.");
+    } finally {
+        setActionLoading(false);
     }
-    
-    setEditingUser(null);
-    loadData();
   };
 
   const handleResetPassword = (e: React.FormEvent) => {
@@ -127,7 +157,11 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
   const executeResetPassword = async () => {
     setConfirmAction(null);
     if (!passwordModalUser) return;
+    
+    setActionLoading(true);
     const success = await supabase.updatePassword(passwordModalUser.id, resetPasswordValue, user);
+    setActionLoading(false);
+
     if (success) {
         alert(t.passwordChanged);
         setPasswordModalUser(null);
@@ -142,7 +176,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
   ];
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
+    <div className="space-y-8 animate-in fade-in duration-500 pb-20">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-3xl font-black text-gray-900 dark:text-white leading-tight">{t.manageTeam}</h2>
@@ -156,7 +190,11 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {users.map(u => (
+        {loading ? (
+            <div className="col-span-full flex justify-center py-20">
+                <Loader2 className="animate-spin text-primary-500 w-8 h-8" />
+            </div>
+        ) : users.map(u => (
           <div key={u.id} className="bg-white dark:bg-gray-800 p-6 rounded-[2rem] border border-gray-100 dark:border-gray-700 flex items-center justify-between shadow-sm hover:shadow-md transition-all group">
             <div className="flex items-center gap-5">
               <div className="w-14 h-14 bg-gray-50 dark:bg-gray-700 rounded-2xl flex items-center justify-center text-gray-400 group-hover:text-primary-500 transition-colors">
@@ -229,7 +267,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
                     </div>
                     <div className="flex gap-4">
                         <button type="button" onClick={() => { setPasswordModalUser(null); setResetPasswordValue(''); }} className="flex-1 py-5 bg-gray-100 dark:bg-gray-700 rounded-2xl font-black text-xs uppercase tracking-widest">{t.cancel}</button>
-                        <button type="submit" className="flex-1 py-5 bg-amber-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-amber-500/30">{t.confirm}</button>
+                        <button type="submit" disabled={actionLoading} className="flex-1 py-5 bg-amber-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-amber-500/30 flex justify-center">{actionLoading ? <Loader2 className="animate-spin w-4 h-4"/> : t.confirm}</button>
                     </div>
                 </form>
             </div>
@@ -255,11 +293,13 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
                     else if(confirmAction.type === 'UPDATE_USER') executeUpdateUser();
                     else executeResetPassword();
                 }}
-                className="w-full py-5 bg-primary-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-primary-500/30 active:scale-95 transition-all"
+                disabled={actionLoading}
+                className="w-full py-5 bg-primary-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-primary-500/30 active:scale-95 transition-all flex justify-center items-center gap-2"
               >
+                {actionLoading && <Loader2 className="animate-spin w-4 h-4" />}
                 {t.confirm}
               </button>
-              <button onClick={() => setConfirmAction(null)} className="w-full py-5 bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white rounded-2xl font-black text-sm uppercase tracking-widest active:scale-95 transition-all">
+              <button onClick={() => setConfirmAction(null)} disabled={actionLoading} className="w-full py-5 bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white rounded-2xl font-black text-sm uppercase tracking-widest active:scale-95 transition-all">
                 {t.cancel}
               </button>
             </div>
@@ -353,7 +393,10 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
 
                 <div className="flex gap-4 pt-4">
                     <button type="button" onClick={() => setEditingUser(null)} className="flex-1 py-5 bg-gray-100 dark:bg-gray-700 rounded-2xl font-black text-xs uppercase tracking-widest text-gray-900 dark:text-white">{t.cancel}</button>
-                    <button type="submit" className="flex-1 py-5 bg-primary-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-primary-500/30">{t.confirm}</button>
+                    <button type="submit" disabled={actionLoading} className="flex-1 py-5 bg-primary-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-primary-500/30 flex justify-center items-center gap-2">
+                        {actionLoading && <Loader2 className="animate-spin w-4 h-4" />}
+                        {t.confirm}
+                    </button>
                 </div>
             </form>
           </div>

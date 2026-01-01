@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Building2, Save, CheckCircle, Smartphone, MessageSquare, AlertTriangle, ShieldCheck, Eye, EyeOff, ShieldAlert, Ban } from 'lucide-react';
+import { Building2, Save, CheckCircle, Smartphone, MessageSquare, AlertTriangle, ShieldCheck, Eye, EyeOff, ShieldAlert, Ban, Loader2 } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import { Agency, UserProfile, UserRole } from '../types';
 import { translations, Language } from '../i18n';
@@ -15,7 +15,9 @@ const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang }) => {
   const [currency, setCurrency] = useState('GNF');
   const [receiptHeader, setReceiptHeader] = useState('');
   const [contactPhone, setContactPhone] = useState('');
+  
   const [saved, setSaved] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   
   // États Changement MDP
@@ -26,7 +28,7 @@ const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang }) => {
   
   const t = translations[lang];
 
-  // GATEKEEPER : Si l'utilisateur est un vendeur, on bloque l'accès immédiatement.
+  // GATEKEEPER : Blocage strict côté UI pour les vendeurs
   if (user.role === UserRole.SELLER) {
       return (
           <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-6 animate-in zoom-in duration-500">
@@ -46,13 +48,17 @@ const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang }) => {
   }, []);
 
   const loadAgency = async () => {
-    const data = await supabase.getAgency(user.agency_id);
-    if (data) {
-      setAgency(data);
-      setName(data.name);
-      setCurrency(data.settings?.currency || 'GNF');
-      setReceiptHeader(data.settings?.whatsapp_receipt_header || '');
-      setContactPhone(data.settings?.contact_phone || '');
+    try {
+      const data = await supabase.getAgency(user.agency_id);
+      if (data) {
+        setAgency(data);
+        setName(data.name);
+        setCurrency(data.settings?.currency || 'GNF');
+        setReceiptHeader(data.settings?.whatsapp_receipt_header || '');
+        setContactPhone(data.settings?.contact_phone || '');
+      }
+    } catch (e) {
+      console.error("Erreur chargement agence", e);
     }
   };
 
@@ -63,16 +69,22 @@ const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang }) => {
 
   const executeSave = async () => {
     setShowConfirm(false);
+    setIsSaving(true);
     try {
         await supabase.updateAgency(user.agency_id, name, {
             currency,
             whatsapp_receipt_header: receiptHeader,
             contact_phone: contactPhone
         }, user);
+        
         setSaved(true);
         setTimeout(() => setSaved(false), 3000);
+        // Recharger pour s'assurer que l'état local est synchro
+        await loadAgency(); 
     } catch (e) {
-        alert("Erreur: Accès refusé ou problème serveur.");
+        alert("Erreur: Impossible de sauvegarder les modifications.");
+    } finally {
+        setIsSaving(false);
     }
   };
 
@@ -151,8 +163,8 @@ const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang }) => {
               </div>
             </div>
 
-            <button type="submit" disabled={saved} className={`w-full py-6 rounded-[1.5rem] font-black text-lg flex items-center justify-center gap-4 transition-all active:scale-[0.98] shadow-2xl ${saved ? 'bg-green-500 text-white' : 'bg-primary-600 text-white hover:bg-primary-700 shadow-primary-500/40'}`}>
-              {saved ? (<><CheckCircle className="w-6 h-6 animate-bounce" /> Configuration Enregistrée</>) : (<><Save className="w-6 h-6" /> {t.saveSettings}</>)}
+            <button type="submit" disabled={saved || isSaving} className={`w-full py-6 rounded-[1.5rem] font-black text-lg flex items-center justify-center gap-4 transition-all active:scale-[0.98] shadow-2xl ${saved ? 'bg-green-500 text-white' : 'bg-primary-600 text-white hover:bg-primary-700 shadow-primary-500/40'}`}>
+              {isSaving ? <Loader2 className="w-6 h-6 animate-spin" /> : saved ? (<><CheckCircle className="w-6 h-6 animate-bounce" /> Configuration Enregistrée</>) : (<><Save className="w-6 h-6" /> {t.saveSettings}</>)}
             </button>
         </form>
 
@@ -193,7 +205,7 @@ const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang }) => {
                     </div>
                 </div>
                 <button type="submit" disabled={pwdLoading} className="w-full py-5 rounded-2xl font-black text-xs uppercase tracking-widest bg-amber-500 text-white shadow-lg shadow-amber-500/20 active:scale-95 transition-all flex items-center justify-center gap-3">
-                    {pwdLoading ? <span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" /> : <ShieldCheck className="w-4 h-4" />}
+                    {pwdLoading ? <Loader2 className="animate-spin h-4 w-4" /> : <ShieldCheck className="w-4 h-4" />}
                     {t.changePassword}
                 </button>
             </form>
