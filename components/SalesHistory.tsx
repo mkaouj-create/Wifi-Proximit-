@@ -236,11 +236,14 @@ const SalesHistory: React.FC<SalesHistoryProps> = ({ user, lang }) => {
                      <div className="w-16 h-16 bg-primary-100 dark:bg-primary-900/30 text-primary-600 rounded-[2rem] flex items-center justify-center mx-auto shadow-lg shadow-primary-500/10"><Tag size={32} /></div>
                      <h3 className="text-xl font-black text-gray-900 dark:text-white uppercase tracking-tight">Détails Vente</h3>
                  </div>
-                 <div className="space-y-3">
+                 
+                 {/* Layout en Grille pour : 1. Wifi & Prix, 2. Validité & WhatsApp */}
+                 <div className="grid grid-cols-2 gap-3">
                      <DetailRow icon={<Wifi className="text-primary-500" />} label="Code Wifi" val={selectedSale.ticket_username || 'N/A'} isBold />
                      <DetailRow icon={<Banknote className="text-green-500" />} label="Prix" val={`${selectedSale.amount.toLocaleString()} ${currency}`} />
+                     
                      <DetailRow icon={<Clock className="text-amber-500" />} label="Validité" val={selectedSale.ticket_time_limit || 'N/A'} />
-                     <DetailRow icon={<Phone className="text-blue-500" />} label="WhatsApp Client" val={selectedSale.customer_phone || 'Non renseigné'} />
+                     <DetailRow icon={<Phone className="text-blue-500" />} label="WhatsApp" val={selectedSale.customer_phone || 'N/A'} />
                  </div>
                </div>
 
@@ -277,11 +280,11 @@ const SalesHistory: React.FC<SalesHistoryProps> = ({ user, lang }) => {
 };
 
 const DetailRow = ({ icon, label, val, isBold = false }: any) => (
-    <div className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-2xl flex items-center gap-4 border border-transparent dark:border-gray-700/30">
-        <div className="p-3 bg-white dark:bg-gray-800 rounded-xl shadow-sm shrink-0">{icon}</div>
+    <div className="bg-gray-50 dark:bg-gray-900/50 p-3 rounded-2xl flex items-center gap-3 border border-transparent dark:border-gray-700/30 overflow-hidden">
+        <div className="p-2.5 bg-white dark:bg-gray-800 rounded-xl shadow-sm shrink-0">{icon}</div>
         <div className="min-w-0 flex-1">
-            <p className="text-[9px] text-gray-400 font-black uppercase tracking-widest leading-none mb-1">{label}</p>
-            <p className={`font-black uppercase truncate leading-none ${isBold ? 'text-lg text-primary-600 dark:text-primary-400' : 'text-sm text-gray-900 dark:text-white'}`}>{val}</p>
+            <p className="text-[9px] text-gray-400 font-black uppercase tracking-widest leading-none mb-1 truncate">{label}</p>
+            <p className={`font-black uppercase truncate leading-none ${isBold ? 'text-base md:text-lg text-primary-600 dark:text-primary-400' : 'text-xs md:text-sm text-gray-900 dark:text-white'}`}>{val}</p>
         </div>
     </div>
 );
