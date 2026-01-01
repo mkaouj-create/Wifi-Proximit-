@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { UserPlus, User, Shield, Mail, Edit3, X, Check, Building2, Lock, KeyRound, AlertTriangle, Key } from 'lucide-react';
 import { supabase } from '../services/supabase';
@@ -14,7 +13,12 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [agencies, setAgencies] = useState<Agency[]>([]);
   const [showAdd, setShowAdd] = useState(false);
+  
+  // États d'édition unifiés
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
+  const [editRole, setEditRole] = useState<UserRole>(UserRole.SELLER);
+  const [editEmail, setEditEmail] = useState('');
+  
   const [passwordModalUser, setPasswordModalUser] = useState<UserProfile | null>(null);
   
   const [newEmail, setNewEmail] = useState('');
@@ -23,9 +27,8 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
   const [newRole, setNewRole] = useState<UserRole>(UserRole.SELLER);
   const [targetAgencyId, setTargetAgencyId] = useState<string>(user.agency_id);
   
-  const [editRole, setEditRole] = useState<UserRole>(UserRole.SELLER);
   const [resetPasswordValue, setResetPasswordValue] = useState('');
-  const [confirmAction, setConfirmAction] = useState<{type: 'ADD' | 'UPDATE_ROLE' | 'RESET_PWD', payload?: any} | null>(null);
+  const [confirmAction, setConfirmAction] = useState<{type: 'ADD' | 'UPDATE_USER' | 'RESET_PWD', payload?: any} | null>(null);
 
   const t = translations[lang];
   const isSuperAdmin = user.role === UserRole.SUPER_ADMIN;
@@ -47,11 +50,21 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
 
   const getAgencyName = (id: string) => agencies.find(a => a.id === id)?.name || 'Inconnue';
 
-  const canManagePassword = (target: UserProfile) => {
-    if (isSuperAdmin && target.id !== user.id) return true;
+  // Sécurité: Qui peut modifier qui ?
+  const canEditUser = (target: UserProfile) => {
+    // Un vendeur ne peut rien modifier
+    if (user.role === UserRole.SELLER) return false;
+    
+    // Un Super Admin peut tout modifier (sauf peut-être lui-même dans cette vue pour éviter de se bloquer)
+    if (isSuperAdmin) return true;
+    
+    // Un Admin peut modifier les Vendeurs de SON agence
     if (user.role === UserRole.ADMIN && target.role === UserRole.SELLER && target.agency_id === user.agency_id) return true;
+    
     return false;
   };
+
+  const canResetPassword = (target: UserProfile) => canEditUser(target);
 
   const handleAddSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -70,15 +83,34 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
     loadData();
   };
 
-  const handleUpdateRoleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setConfirmAction({ type: 'UPDATE_ROLE' });
+  const openEditModal = (u: UserProfile) => {
+      setEditingUser(u);
+      setEditRole(u.role);
+      setEditEmail(u.email);
   };
 
-  const executeUpdateRole = async () => {
+  const handleUpdateUserSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setConfirmAction({ type: 'UPDATE_USER' });
+  };
+
+  const executeUpdateUser = async () => {
     setConfirmAction(null);
     if (!editingUser) return;
-    await supabase.updateUserRole(editingUser.id, editRole);
+    
+    // 1. Mise à jour du rôle
+    if (editRole !== editingUser.role) {
+        await supabase.updateUserRole(editingUser.id, editRole);
+    }
+    
+    // 2. Mise à jour de l'email (si changé)
+    if (editEmail !== editingUser.email) {
+        const success = await supabase.updateUserEmail(editingUser.id, editEmail, user);
+        if (!success) {
+            alert("Erreur lors de la mise à jour de l'email. Vérifiez vos permissions ou si l'email existe déjà.");
+        }
+    }
+    
     setEditingUser(null);
     loadData();
   };
@@ -100,6 +132,8 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
         alert(t.passwordChanged);
         setPasswordModalUser(null);
         setResetPasswordValue('');
+    } else {
+        alert("Erreur: Vous n'avez pas les droits pour modifier ce mot de passe.");
     }
   };
 
@@ -114,9 +148,11 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
           <h2 className="text-3xl font-black text-gray-900 dark:text-white leading-tight">{t.manageTeam}</h2>
           <p className="text-sm text-gray-500 font-medium">{users.length} collaborateurs</p>
         </div>
-        <button onClick={() => setShowAdd(true)} className="flex items-center gap-3 bg-primary-600 text-white px-6 py-4 rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl shadow-primary-500/30 active:scale-95 transition-all">
-          <UserPlus className="w-5 h-5" /> {t.addMember}
-        </button>
+        {user.role !== UserRole.SELLER && (
+          <button onClick={() => setShowAdd(true)} className="flex items-center gap-3 bg-primary-600 text-white px-6 py-4 rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl shadow-primary-500/30 active:scale-95 transition-all">
+            <UserPlus className="w-5 h-5" /> {t.addMember}
+          </button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -152,13 +188,13 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
               </span>
               
               <div className="flex gap-2">
-                {canManagePassword(u) && (
+                {canResetPassword(u) && (
                   <button onClick={() => setPasswordModalUser(u)} className="p-2 bg-gray-50 dark:bg-gray-700 hover:bg-amber-50 dark:hover:bg-amber-900/20 text-gray-400 hover:text-amber-600 rounded-xl transition-all active:scale-90" title={t.resetPassword}>
                     <Key className="w-4 h-4" />
                   </button>
                 )}
-                {u.id !== user.id && (isSuperAdmin || u.role !== UserRole.SUPER_ADMIN) && (
-                  <button onClick={() => { setEditingUser(u); setEditRole(u.role); }} className="p-2 bg-gray-50 dark:bg-gray-700 hover:bg-primary-50 dark:hover:bg-primary-900/20 text-gray-400 hover:text-primary-600 rounded-xl transition-all active:scale-90">
+                {canEditUser(u) && (
+                  <button onClick={() => openEditModal(u)} className="p-2 bg-gray-50 dark:bg-gray-700 hover:bg-primary-50 dark:hover:bg-primary-900/20 text-gray-400 hover:text-primary-600 rounded-xl transition-all active:scale-90">
                     <Edit3 className="w-4 h-4" />
                   </button>
                 )}
@@ -200,9 +236,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
         </div>
       )}
 
-      {/* Les autres modales (Add / Edit Role / Confirm) restent identiques mais utilisent executeResetPassword si besoin */}
-      {/* ... (Code existant pour les autres modales) ... */}
-      
+      {/* Modal Confirmation Générique */}
       {confirmAction && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-300">
           <div className="bg-white dark:bg-gray-800 w-full max-w-sm rounded-[2.5rem] p-10 shadow-2xl animate-in zoom-in duration-300 text-center">
@@ -212,13 +246,13 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
             <h3 className="text-2xl font-black text-gray-900 dark:text-white mb-4">{t.confirmActionTitle}</h3>
             <p className="text-sm text-gray-500 dark:text-gray-400 font-medium leading-relaxed mb-8">
               {confirmAction.type === 'ADD' ? t.confirmCreateUser : 
-               confirmAction.type === 'UPDATE_ROLE' ? t.confirmUpdateRole : "Voulez-vous vraiment réinitialiser ce mot de passe ?"}
+               confirmAction.type === 'UPDATE_USER' ? "Voulez-vous enregistrer ces modifications ?" : "Voulez-vous vraiment réinitialiser ce mot de passe ?"}
             </p>
             <div className="flex flex-col gap-3">
               <button 
                 onClick={() => {
                     if(confirmAction.type === 'ADD') executeAddUser();
-                    else if(confirmAction.type === 'UPDATE_ROLE') executeUpdateRole();
+                    else if(confirmAction.type === 'UPDATE_USER') executeUpdateUser();
                     else executeResetPassword();
                 }}
                 className="w-full py-5 bg-primary-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-primary-500/30 active:scale-95 transition-all"
@@ -233,7 +267,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
         </div>
       )}
 
-      {/* Modal d'Ajout (Copie du code précédent pour complétude) */}
+      {/* Modal d'Ajout */}
       {showAdd && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-300">
           <div className="bg-white dark:bg-gray-800 w-full max-w-md rounded-[2.5rem] p-10 shadow-2xl animate-in zoom-in duration-300 overflow-y-auto max-h-[90vh] no-scrollbar">
@@ -275,12 +309,52 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
         </div>
       )}
 
+      {/* Modal Edition Utilisateur (Rôle + Email) */}
       {editingUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-300">
           <div className="bg-white dark:bg-gray-800 w-full max-w-sm rounded-[2.5rem] p-10 shadow-2xl animate-in zoom-in duration-300">
-            <div className="text-center space-y-3 mb-8"><div className="w-16 h-16 bg-primary-50 dark:bg-primary-900/20 text-primary-600 rounded-2xl flex items-center justify-center mx-auto mb-4"><Shield className="w-8 h-8" /></div><h3 className="text-2xl font-black text-gray-900 dark:text-white">Modifier le Rôle</h3><p className="text-xs text-gray-400 font-bold uppercase tracking-widest">{editingUser.display_name}</p></div>
-            <form onSubmit={handleUpdateRoleSubmit} className="space-y-8"><div className="space-y-2"><label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-2">{t.role}</label><div className="grid grid-cols-1 gap-2">{allowedRoles.map(role => (<button key={role} type="button" onClick={() => setEditRole(role)} className={`p-4 rounded-2xl text-left border-2 transition-all flex items-center justify-between font-bold text-sm ${editRole === role ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20 text-primary-600' : 'border-gray-50 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>{role.replace('_', ' ')}{editRole === role && <Check className="w-4 h-4" />}</button>))}</div></div>
-              <div className="flex gap-4"><button type="button" onClick={() => setEditingUser(null)} className="flex-1 py-5 bg-gray-100 dark:bg-gray-700 rounded-2xl font-black text-xs uppercase tracking-widest text-gray-900 dark:text-white">{t.cancel}</button><button type="submit" className="flex-1 py-5 bg-primary-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-primary-500/30">{t.confirm}</button></div>
+            <div className="text-center space-y-3 mb-8">
+                <div className="w-16 h-16 bg-primary-50 dark:bg-primary-900/20 text-primary-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                    <Edit3 className="w-8 h-8" />
+                </div>
+                <h3 className="text-2xl font-black text-gray-900 dark:text-white">Modifier Profil</h3>
+                <p className="text-xs text-gray-400 font-bold uppercase tracking-widest">{editingUser.display_name}</p>
+            </div>
+            
+            <form onSubmit={handleUpdateUserSubmit} className="space-y-6">
+                
+                {/* Modification Email */}
+                <div className="space-y-2">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-2">Email</label>
+                    <div className="relative">
+                        <Mail className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
+                        <input 
+                            type="email" 
+                            className="w-full pl-14 pr-6 py-5 bg-gray-50 dark:bg-gray-900 border-none rounded-2xl focus:ring-4 focus:ring-primary-500/10 font-bold text-gray-900 dark:text-white" 
+                            value={editEmail} 
+                            onChange={(e) => setEditEmail(e.target.value)} 
+                            required 
+                        />
+                    </div>
+                </div>
+
+                {/* Modification Rôle */}
+                <div className="space-y-2">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-2">{t.role}</label>
+                    <div className="grid grid-cols-1 gap-2">
+                        {allowedRoles.map(role => (
+                            <button key={role} type="button" onClick={() => setEditRole(role)} className={`p-4 rounded-2xl text-left border-2 transition-all flex items-center justify-between font-bold text-sm ${editRole === role ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20 text-primary-600' : 'border-gray-50 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>
+                                {role.replace('_', ' ')}
+                                {editRole === role && <Check className="w-4 h-4" />}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="flex gap-4 pt-4">
+                    <button type="button" onClick={() => setEditingUser(null)} className="flex-1 py-5 bg-gray-100 dark:bg-gray-700 rounded-2xl font-black text-xs uppercase tracking-widest text-gray-900 dark:text-white">{t.cancel}</button>
+                    <button type="submit" className="flex-1 py-5 bg-primary-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-primary-500/30">{t.confirm}</button>
+                </div>
             </form>
           </div>
         </div>

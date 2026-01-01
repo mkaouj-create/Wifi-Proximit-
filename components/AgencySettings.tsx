@@ -1,8 +1,7 @@
-
 import React, { useState, useEffect } from 'react';
-import { Building2, Save, CheckCircle, Smartphone, MessageSquare, AlertTriangle, ShieldCheck, Eye, EyeOff } from 'lucide-react';
+import { Building2, Save, CheckCircle, Smartphone, MessageSquare, AlertTriangle, ShieldCheck, Eye, EyeOff, ShieldAlert, Ban } from 'lucide-react';
 import { supabase } from '../services/supabase';
-import { Agency, UserProfile } from '../types';
+import { Agency, UserProfile, UserRole } from '../types';
 import { translations, Language } from '../i18n';
 
 interface AgencySettingsProps {
@@ -27,6 +26,21 @@ const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang }) => {
   
   const t = translations[lang];
 
+  // GATEKEEPER : Si l'utilisateur est un vendeur, on bloque l'accès immédiatement.
+  if (user.role === UserRole.SELLER) {
+      return (
+          <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-6 animate-in zoom-in duration-500">
+              <div className="w-24 h-24 bg-red-50 dark:bg-red-900/20 text-red-500 rounded-[2.5rem] flex items-center justify-center shadow-lg border-2 border-red-100 dark:border-red-900">
+                  <ShieldAlert size={48} />
+              </div>
+              <div className="text-center space-y-2">
+                  <h2 className="text-3xl font-black text-gray-900 dark:text-white uppercase">Accès Refusé</h2>
+                  <p className="text-gray-500 font-medium max-w-sm mx-auto">Votre rôle de <span className="text-red-500 font-bold">VENDEUR</span> ne vous permet pas d'accéder aux paramètres sensibles de l'agence.</p>
+              </div>
+          </div>
+      );
+  }
+
   useEffect(() => {
     loadAgency();
   }, []);
@@ -49,13 +63,17 @@ const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang }) => {
 
   const executeSave = async () => {
     setShowConfirm(false);
-    await supabase.updateAgency(user.agency_id, name, {
-      currency,
-      whatsapp_receipt_header: receiptHeader,
-      contact_phone: contactPhone
-    });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
+    try {
+        await supabase.updateAgency(user.agency_id, name, {
+            currency,
+            whatsapp_receipt_header: receiptHeader,
+            contact_phone: contactPhone
+        }, user);
+        setSaved(true);
+        setTimeout(() => setSaved(false), 3000);
+    } catch (e) {
+        alert("Erreur: Accès refusé ou problème serveur.");
+    }
   };
 
   const handlePasswordChange = async (e: React.FormEvent) => {

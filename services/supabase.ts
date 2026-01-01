@@ -332,11 +332,19 @@ class SupabaseService {
     return (data as ActivityLog[]) || [];
   }
 
-  async updateAgency(id: string, name: string, settings: Partial<AgencySettings>): Promise<void> {
+  // --- SÉCURITÉ & RESTRICTIONS ---
+
+  async updateAgency(id: string, name: string, settings: Partial<AgencySettings>, actor?: UserProfile): Promise<void> {
+    // Restriction Vendeur
+    if (actor && actor.role === UserRole.SELLER) throw new Error("Accès interdit aux vendeurs.");
+    
     await client.from('agencies').update({ name, settings }).eq('id', id);
+    if(actor) await this.log(actor, 'AGENCY_UPDATE', `Mise à jour paramètres agence`);
   }
 
   async updateAgencyModules(id: string, modules: AgencyModules, actor: UserProfile): Promise<void> {
+    if (actor.role === UserRole.SELLER) throw new Error("Accès interdit.");
+    
     const { data: agency } = await client.from('agencies').select('settings').eq('id', id).single();
     await client.from('agencies').update({ settings: { ...(agency?.settings || {}), modules } }).eq('id', id);
     await this.log(actor, 'AGENCY_MODULES', `Modules mis à jour pour ${id}`);
@@ -348,6 +356,7 @@ class SupabaseService {
   }
 
   async addUser(userData: any): Promise<void> { 
+    // TODO: Dans une app réelle, vérifier ici si l'acteur a le droit de créer un user
     await client.from('profiles').insert({ ...userData, display_name: userData.email.split('@')[0] });
   }
 
@@ -355,11 +364,50 @@ class SupabaseService {
     await client.from('profiles').update({ role }).eq('id', uid);
   }
 
+  /**
+   * Modifie le mot de passe d'un utilisateur.
+   * Règles : 
+   * 1. Un utilisateur peut modifier son propre mot de passe.
+   * 2. Un Admin/SuperAdmin peut modifier le mot de passe d'autrui.
+   * 3. Un Vendeur NE PEUT PAS modifier le mot de passe d'un autre utilisateur.
+   */
   async updatePassword(uid: string, password: string, actor: UserProfile): Promise<boolean> { 
+    // Vérification stricte des permissions
+    const isSelf = uid === actor.id;
+    const isAuthorized = actor.role === UserRole.SUPER_ADMIN || actor.role === UserRole.ADMIN;
+
+    if (!isSelf && !isAuthorized) {
+      console.error("Tentative non autorisée de modification de mot de passe");
+      return false;
+    }
+
     const { error } = await client.from('profiles').update({ password }).eq('id', uid);
     if (error) return false;
-    await this.log(actor, 'PASSWORD_CHANGE', `Profil ${uid}`);
+    
+    await this.log(actor, 'PASSWORD_CHANGE', `Profil ${uid} (Target)`);
     return true; 
+  }
+
+  /**
+   * Modifie l'email d'un utilisateur.
+   * Réservé aux Admins et Super Admins.
+   */
+  async updateUserEmail(uid: string, newEmail: string, actor: UserProfile): Promise<boolean> {
+    if (actor.role === UserRole.SELLER) {
+        console.error("Les vendeurs ne peuvent pas modifier les emails.");
+        return false;
+    }
+
+    // Vérification d'unicité (optionnel mais recommandé, ici on laisse la DB renvoyer une erreur si contrainte unique)
+    const { error } = await client.from('profiles').update({ email: newEmail }).eq('id', uid);
+    
+    if (error) {
+        console.error("Erreur mise à jour email:", error);
+        return false;
+    }
+
+    await this.log(actor, 'USER_UPDATE', `Email modifié pour l'utilisateur ${uid}`);
+    return true;
   }
 
   async deleteTicket(id: string): Promise<void> { await client.from('tickets').delete().eq('id', id); }
