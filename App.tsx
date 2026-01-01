@@ -166,9 +166,14 @@ const App: React.FC = () => {
     if (!currentAgency?.settings?.modules) return false;
     
     const modules = currentAgency.settings.modules as AgencyModules;
-    // Vérification type-safe
-    const moduleKey = tab as keyof AgencyModules;
-    return modules[moduleKey] !== false;
+    
+    // Vérifier si le tab correspond à une clé connue de AgencyModules
+    if (tab in modules) {
+        return modules[tab as keyof AgencyModules] !== false;
+    }
+    
+    // Si c'est un onglet système (settings, users, agencies), on laisse l'accès selon le rôle (géré par le JSX)
+    return true;
   }, [user, currentAgency]);
 
   if (currentView === 'LOADING') return (
@@ -307,7 +312,7 @@ const App: React.FC = () => {
               {activeTab === 'tasks' && <TaskManager user={user} lang={lang} />}
               {activeTab === 'agencies' && <AgencyManager user={user} lang={lang} notify={notify} />}
               {activeTab === 'users' && <UserManagement user={user} lang={lang} />}
-              {activeTab === 'settings' && <AgencySettings user={user} lang={lang} />}
+              {activeTab === 'settings' && <AgencySettings user={user} lang={lang} notify={notify} />}
             </div>
           </main>
 

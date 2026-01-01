@@ -1,11 +1,17 @@
-
 import React, { useEffect, useState, useCallback } from 'react';
 import { TrendingUp, ShoppingBag, Database, Users, Building2, ChevronRight, CheckCircle, AlertCircle, RefreshCcw, Coins } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import { UserProfile, UserRole } from '../types';
 import { translations, Language } from '../i18n';
 
-const Dashboard: React.FC<{ user: UserProfile, lang: Language, onNavigate: (t: string) => void, notify: any }> = ({ user, lang, onNavigate, notify }) => {
+interface DashboardProps {
+  user: UserProfile;
+  lang: Language;
+  onNavigate: (t: string) => void;
+  notify: (type: 'success' | 'error' | 'info', message: string) => void;
+}
+
+const Dashboard: React.FC<DashboardProps> = ({ user, lang, onNavigate, notify }) => {
   const [stats, setStats] = useState({ revenue: 0, soldCount: 0, stockCount: 0, agencyCount: 0, userCount: 0, currency: 'GNF', credits: 0 });
   const [isSyncing, setIsSyncing] = useState(false);
   const t = translations[lang];

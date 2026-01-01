@@ -7,9 +7,10 @@ import { translations, Language } from '../i18n';
 interface AgencySettingsProps {
   user: UserProfile;
   lang: Language;
+  notify?: (type: 'success' | 'error' | 'info', message: string) => void;
 }
 
-const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang }) => {
+const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang, notify }) => {
   const [agency, setAgency] = useState<Agency | null>(null);
   const [name, setName] = useState('');
   const [currency, setCurrency] = useState('GNF');
@@ -27,6 +28,11 @@ const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang }) => {
   const [pwdLoading, setPwdLoading] = useState(false);
   
   const t = translations[lang];
+
+  const safeNotify = (type: 'success' | 'error' | 'info', message: string) => {
+    if (notify) notify(type, message);
+    else if (type === 'error') alert(message);
+  };
 
   // GATEKEEPER : Blocage strict côté UI pour les vendeurs
   if (user.role === UserRole.SELLER) {
@@ -78,11 +84,12 @@ const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang }) => {
         }, user);
         
         setSaved(true);
+        safeNotify('success', 'Configuration enregistrée');
         setTimeout(() => setSaved(false), 3000);
         // Recharger pour s'assurer que l'état local est synchro
         await loadAgency(); 
     } catch (e) {
-        alert("Erreur: Impossible de sauvegarder les modifications.");
+        safeNotify('error', "Impossible de sauvegarder les modifications.");
     } finally {
         setIsSaving(false);
     }
@@ -91,11 +98,11 @@ const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang }) => {
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newPassword.length < 6) {
-        alert(t.passwordTooShort);
+        safeNotify('error', t.passwordTooShort);
         return;
     }
     if (newPassword !== confirmPassword) {
-        alert(t.passwordMismatch);
+        safeNotify('error', t.passwordMismatch);
         return;
     }
 
@@ -104,11 +111,11 @@ const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang }) => {
     setPwdLoading(false);
 
     if (success) {
-        alert(t.passwordChanged);
+        safeNotify('success', t.passwordChanged);
         setNewPassword('');
         setConfirmPassword('');
     } else {
-        alert("Une erreur est survenue lors de la mise à jour.");
+        safeNotify('error', "Une erreur est survenue lors de la mise à jour.");
     }
   };
 

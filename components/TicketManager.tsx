@@ -214,7 +214,7 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
               {agencies.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
             </select>
           )}
-          <select className="flex-1 md:flex-none bg-gray-50 dark:bg-gray-900 md:bg-transparent px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest outline-none dark:text-white cursor-pointer border md:border-none border-gray-100 dark:border-gray-700" value={filterStatus} onChange={e => setFilterStatus(e.target.value as any)}>
+          <select className="flex-1 md:flex-none bg-gray-50 dark:bg-gray-900 md:bg-transparent px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest outline-none dark:text-white cursor-pointer border md:border-none border-gray-100 dark:border-gray-700" value={filterStatus} onChange={e => setFilterStatus(e.target.value as TicketStatus | 'ALL')}>
             <option value="ALL">Tous Statuts</option>
             <option value="UNSOLD">Stock</option>
             <option value="SOLD">Vendu</option>
