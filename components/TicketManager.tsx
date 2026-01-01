@@ -21,15 +21,20 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
   const t = translations[lang];
   const isSuper = user.role === UserRole.SUPER_ADMIN;
 
+  // Chargement des données optimisé
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [tks, ags] = await Promise.all([
-        supabase.getTickets(user.agency_id, user.role),
-        isSuper ? supabase.getAgencies() : Promise.resolve([])
-      ]);
+      // Chargement parallèle
+      const promises: any[] = [supabase.getTickets(user.agency_id, user.role)];
+      if (isSuper) promises.push(supabase.getAgencies());
+      
+      const results = await Promise.all(promises);
+      const tks = results[0];
+      
       setTickets(tks);
-      setAgencies(ags);
+      if (isSuper && results[1]) setAgencies(results[1]);
+      
     } catch (err) {
       notify('error', "Échec du chargement des données.");
     } finally {
@@ -39,8 +44,9 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  // Liste unique des profils pour le filtre de prix de groupe (basé sur le stock actuel)
   const uniqueProfiles = useMemo(() => 
-    Array.from(new Set(tickets.filter(tk => tk.status === TicketStatus.UNSOLD).map(tk => tk.profile))),
+    Array.from(new Set(tickets.map(tk => tk.profile))).sort(),
     [tickets]
   );
 
@@ -53,7 +59,10 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
     
     reader.onload = async (ev) => {
       const text = ev.target?.result as string;
-      if (!text) return;
+      if (!text) {
+          setLoading(false);
+          return;
+      }
 
       const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
       
@@ -63,8 +72,10 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
           return;
       }
 
-      // Analyse intelligente des en-têtes pour supporter différents formats CSV
-      const headers = lines[0].toLowerCase().split(/[;,]/).map(h => h.trim().replace(/^["']|["']$/g, ''));
+      // Analyse intelligente des en-têtes
+      const firstLine = lines[0].toLowerCase();
+      // On retire les guillemets éventuels pour la recherche d'en-tête
+      const headers = firstLine.split(/[;,]/).map(h => h.trim().replace(/^["']|["']$/g, ''));
       
       const idx = {
         user: headers.findIndex(h => h.includes('user') || h === 'login' || h === 'identifiant' || h === 'code'),
@@ -75,18 +86,24 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
       };
 
       // Détection format Mikhmon standard vs CSV générique
-      const isMikhmonStandard = idx.user !== -1 && idx.prof !== -1;
-      const dataLines = isMikhmonStandard ? lines.slice(1) : lines;
+      // Si on trouve 'user' et 'profile' dans la première ligne, on assume qu'il y a un header
+      const hasHeader = idx.user !== -1 && idx.prof !== -1;
+      const dataLines = hasHeader ? lines.slice(1) : lines;
 
       const rows = dataLines.map(line => {
+        // Support CSV simple avec , ou ;
         const p = line.split(/[;,]/).map(v => v.replace(/^["']|["']$/g, '').trim());
-        // Fallback sur les indices 0,1,2,3 si en-têtes non trouvés
+        
+        // Nettoyage du prix : on garde uniquement les chiffres
+        const rawPrice = idx.price !== -1 ? p[idx.price] : "0";
+        const cleanPrice = rawPrice ? parseInt(rawPrice.replace(/\D/g, '')) || 0 : 0;
+
         return { 
-            username: isMikhmonStandard ? p[idx.user] : p[0], 
-            password: idx.pass !== -1 ? p[idx.pass] : (isMikhmonStandard ? p[idx.pass] : p[1] || p[0]), 
+            username: hasHeader ? p[idx.user] : p[0], 
+            password: idx.pass !== -1 ? p[idx.pass] : (hasHeader ? p[idx.pass] : p[1] || p[0]), 
             profile: idx.prof !== -1 ? p[idx.prof] : (p[2] || 'Default'), 
             time_limit: idx.limit !== -1 ? p[idx.limit] : (p[3] || 'N/A'), 
-            price: idx.price !== -1 ? (parseInt(p[idx.price]) || 0) : 0 
+            price: cleanPrice 
         };
       }).filter(r => r.username && r.username.length > 0);
 
@@ -96,7 +113,8 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
           return;
       }
 
-      const targetAgency = isSuper ? (document.getElementById('importAid') as HTMLSelectElement).value : user.agency_id;
+      const importSelect = document.getElementById('importAid') as HTMLSelectElement;
+      const targetAgency = isSuper && importSelect ? importSelect.value : user.agency_id;
       
       try {
         const res = await supabase.importTickets(rows, user.id, targetAgency);
@@ -109,7 +127,7 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
       setLoading(false);
     };
     reader.readAsText(file);
-    e.target.value = ''; // Reset input
+    e.target.value = ''; // Reset input pour permettre de réimporter le même fichier
   };
 
   const handleBulkUpdate = async (e: React.FormEvent) => {
@@ -161,7 +179,7 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h2 className="text-2xl md:text-3xl font-black dark:text-white uppercase tracking-tight">{t.inventory}</h2>
-          <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest leading-none mt-1">{filtered.length} tickets en base</p>
+          <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest leading-none mt-1">{filtered.length} tickets affichés</p>
         </div>
         <div className="flex w-full sm:w-auto gap-2">
             {user.role !== UserRole.SELLER && (

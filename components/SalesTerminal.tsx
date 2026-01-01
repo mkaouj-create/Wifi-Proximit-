@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { ShoppingCart, Phone, CheckCircle2, Share2, Loader2, Copy, Info, Sparkles } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { ShoppingCart, Phone, CheckCircle2, Share2, Loader2, Copy, Info, Sparkles, RefreshCcw } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import { Ticket, UserProfile, TicketStatus, Agency } from '../types';
 import { translations, Language } from '../i18n';
@@ -8,46 +8,61 @@ interface SalesTerminalProps {
   user: UserProfile;
   lang: Language;
   notify: (type: 'success' | 'error' | 'info', message: string) => void;
+  agency?: Agency | null;
 }
 
-const SalesTerminal: React.FC<SalesTerminalProps> = ({ user, lang, notify }) => {
+const SalesTerminal: React.FC<SalesTerminalProps> = ({ user, lang, notify, agency: propAgency }) => {
   const [availableTickets, setAvailableTickets] = useState<Ticket[]>([]);
-  const [agency, setAgency] = useState<Agency | null>(null);
+  const [localAgency, setLocalAgency] = useState<Agency | null>(propAgency || null);
   const [selectedProfile, setSelectedProfile] = useState<string | null>(null);
   const [customerPhone, setCustomerPhone] = useState('');
   const [isSelling, setIsSelling] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [showReceipt, setShowReceipt] = useState(false);
   const [soldTicketInfo, setSoldTicketInfo] = useState<Ticket | null>(null);
   const [showConfirmSale, setShowConfirmSale] = useState(false);
 
   const t = translations[lang];
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
+  // Chargement des données
+  const loadData = useCallback(async (silent = false) => {
+    if (!silent) setIsLoading(true);
     try {
-      const [ticketsData, agencyData] = await Promise.all([
-        supabase.getTickets(user.agency_id, user.role),
-        supabase.getAgency(user.agency_id)
-      ]);
+      // On charge toujours les tickets pour avoir le stock à jour
+      const ticketsData = await supabase.getTickets(user.agency_id, user.role);
       const unsold = ticketsData.filter(ticket => ticket.status === TicketStatus.UNSOLD);
       setAvailableTickets(unsold);
-      setAgency(agencyData);
+
+      // Si l'agence n'est pas passée en prop, on la charge
+      if (!propAgency && !localAgency) {
+        const agencyData = await supabase.getAgency(user.agency_id);
+        setLocalAgency(agencyData);
+      }
     } catch (err) {
-      notify('error', "Échec chargement stock.");
+      notify('error', "Échec de synchronisation du stock.");
+    } finally {
+      if (!silent) setIsLoading(false);
     }
-  };
+  }, [user, propAgency, localAgency, notify]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  // Mise à jour si la prop change
+  useEffect(() => {
+    if (propAgency) setLocalAgency(propAgency);
+  }, [propAgency]);
 
   const dynamicProfiles = useMemo(() => {
-    return Array.from(new Set(availableTickets.map(t => t.profile)));
+    // Trier les profils par ordre alphabétique pour une UI stable
+    return Array.from(new Set(availableTickets.map(t => t.profile))).sort();
   }, [availableTickets]);
 
-  const currency = agency?.settings?.currency || 'GNF';
+  const currency = localAgency?.settings?.currency || 'GNF';
 
   const getReceiptMessage = (ticket: Ticket) => {
-    const header = agency?.settings?.whatsapp_receipt_header || `*${t.appName}*`;
+    const header = localAgency?.settings?.whatsapp_receipt_header || `*${t.appName}*`;
     return `${header}\n\n*CODE WIFI*\nCode: *${ticket.username}*\nValidité: *${ticket.time_limit}*\nPrix: *${ticket.price.toLocaleString()} ${currency}*\n\nMerci de votre confiance !`;
   };
 
@@ -59,20 +74,20 @@ const SalesTerminal: React.FC<SalesTerminalProps> = ({ user, lang, notify }) => 
       await navigator.clipboard.writeText(text);
       notify('success', 'Reçu copié !');
     } catch (err) {
-      // Fallback robuste
-      const textArea = document.createElement("textarea");
-      textArea.value = text;
-      textArea.style.position = "fixed";
-      document.body.appendChild(textArea);
-      textArea.focus();
-      textArea.select();
+      // Fallback
       try {
+        const textArea = document.createElement("textarea");
+        textArea.value = text;
+        textArea.style.position = "fixed";
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
         document.execCommand('copy');
+        document.body.removeChild(textArea);
         notify('success', 'Reçu copié !');
       } catch (e) {
         notify('error', 'Échec de la copie');
       }
-      document.body.removeChild(textArea);
     }
   };
 
@@ -85,6 +100,7 @@ const SalesTerminal: React.FC<SalesTerminalProps> = ({ user, lang, notify }) => 
         url = `https://wa.me/?text=${encodedMessage}`;
     } else {
         let cleanPhone = phone.replace(/\D/g, '').replace(/^0+/, '');
+        // Gestion basique de l'indicatif pour GNF (Guinée)
         if (cleanPhone.length === 9 && currency === 'GNF') {
             cleanPhone = '224' + cleanPhone;
         }
@@ -102,24 +118,43 @@ const SalesTerminal: React.FC<SalesTerminalProps> = ({ user, lang, notify }) => 
     if (!selectedProfile) return;
     setShowConfirmSale(false);
     
-    const ticketToSell = availableTickets.find(t => t.profile === selectedProfile);
-    if (!ticketToSell) return;
+    // 1. Trouver un ticket candidat localement
+    const ticketCandidate = availableTickets.find(t => t.profile === selectedProfile);
+    
+    if (!ticketCandidate) {
+      notify('error', 'Stock épuisé pour ce profil.');
+      loadData(true); // Rafraîchir pour être sûr
+      return;
+    }
 
     setIsSelling(true);
     try {
-      const result = await supabase.sellTicket(ticketToSell.id, user.id, user.agency_id, customerPhone);
+      // 2. Tenter de vendre ce ticket spécifique via Supabase
+      // Note: Le service supabase.sellTicket vérifie déjà si le ticket est UNSOLD.
+      const result = await supabase.sellTicket(ticketCandidate.id, user.id, user.agency_id, customerPhone);
+      
       if (result) {
-        setSoldTicketInfo(ticketToSell);
+        // Succès
+        setSoldTicketInfo(ticketCandidate);
+        
+        // Mise à jour optimiste locale : retirer le ticket vendu de la liste
+        setAvailableTickets(prev => prev.filter(t => t.id !== ticketCandidate.id));
+        
         setShowReceipt(true);
         notify('success', 'Vente réussie !');
-        // Mise à jour optimiste ou re-fetch
-        loadData();
+        
+        // Synchronisation en arrière-plan pour être parfaitement à jour
+        loadData(true);
       } else {
-        notify('error', 'Le ticket sélectionné n\'est plus disponible.');
-        loadData(); // Rafraîchir pour être sûr
+        // Échec (ex: ticket vendu par un autre vendeur entre temps)
+        notify('info', 'Ce ticket vient d\'être vendu. Tentative sur un autre...');
+        
+        // Rafraîchir les données et réessayer automatiquement ou demander à l'utilisateur
+        await loadData(false); // On recharge avec le spinner pour montrer l'activité
+        // On ne relance pas automatiquement pour éviter une boucle, l'utilisateur recliquera.
       }
     } catch (err) {
-      notify('error', "Une erreur est survenue lors de la vente.");
+      notify('error', "Erreur technique lors de la vente.");
     } finally {
       setIsSelling(false);
     }
@@ -213,14 +248,25 @@ const SalesTerminal: React.FC<SalesTerminalProps> = ({ user, lang, notify }) => 
 
   return (
     <div className="space-y-6 md:space-y-8 animate-in fade-in duration-500 max-w-4xl mx-auto">
-      <div className="flex items-center gap-4">
-        <div className="p-3 bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 rounded-2xl shadow-sm shrink-0">
-          <ShoppingCart className="w-8 h-8 md:w-10 md:h-10" />
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <div className="p-3 bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 rounded-2xl shadow-sm shrink-0">
+            <ShoppingCart className="w-8 h-8 md:w-10 md:h-10" />
+          </div>
+          <div>
+            <h2 className="text-2xl md:text-3xl font-black text-gray-900 dark:text-white uppercase tracking-tight leading-none">{t.newSale}</h2>
+            <p className="text-[10px] md:text-xs text-gray-500 font-black uppercase tracking-widest mt-1 leading-none">
+              {isLoading ? 'Mise à jour...' : `${availableTickets.length} en stock`}
+            </p>
+          </div>
         </div>
-        <div>
-          <h2 className="text-2xl md:text-3xl font-black text-gray-900 dark:text-white uppercase tracking-tight leading-none">{t.newSale}</h2>
-          <p className="text-[10px] md:text-xs text-gray-500 font-black uppercase tracking-widest mt-1 leading-none">{availableTickets.length} en stock</p>
-        </div>
+        <button 
+          onClick={() => loadData()} 
+          className="p-3 rounded-2xl bg-white dark:bg-gray-800 border dark:border-gray-700 hover:text-primary-500 active:scale-95 transition-all shadow-sm"
+          disabled={isLoading}
+        >
+          <RefreshCcw size={20} className={isLoading ? 'animate-spin' : ''} />
+        </button>
       </div>
 
       <div className="space-y-6 md:space-y-8">
@@ -235,7 +281,7 @@ const SalesTerminal: React.FC<SalesTerminalProps> = ({ user, lang, notify }) => 
               {dynamicProfiles.map(profile => {
                 const ticketsOfProfile = availableTickets.filter(ticket => ticket.profile === profile);
                 const count = ticketsOfProfile.length;
-                const sampleTicket = ticketsOfProfile[0];
+                const sampleTicket = ticketsOfProfile[0]; // Prix théorique
                 const isSelected = selectedProfile === profile;
                 
                 return (
@@ -248,19 +294,19 @@ const SalesTerminal: React.FC<SalesTerminalProps> = ({ user, lang, notify }) => 
                       : 'border-white dark:border-gray-800 bg-white dark:bg-gray-800 hover:border-primary-200 shadow-sm'
                     }`}
                   >
-                    <div className="min-w-0">
+                    <div className="min-w-0 z-10">
                       <p className={`font-black text-base md:text-xl leading-tight transition-colors truncate uppercase ${isSelected ? 'text-primary-600 dark:text-primary-400' : 'text-gray-900 dark:text-white'}`}>{profile}</p>
                       <p className="text-[9px] text-gray-400 font-black uppercase tracking-widest mt-1">{count} Restants</p>
                     </div>
                     
-                    <div className="mt-4">
+                    <div className="mt-4 z-10">
                       <p className="text-xl md:text-2xl font-black text-gray-900 dark:text-white leading-none">
                         {sampleTicket?.price.toLocaleString()} <span className="text-[10px] md:text-xs font-medium text-gray-400 uppercase">{currency}</span>
                       </p>
                     </div>
                     
                     {isSelected && (
-                      <div className="absolute top-4 right-4 md:top-6 md:right-6 bg-primary-600 text-white p-1 rounded-full shadow-lg">
+                      <div className="absolute top-4 right-4 md:top-6 md:right-6 bg-primary-600 text-white p-1 rounded-full shadow-lg z-20">
                         <CheckCircle2 size={18} />
                       </div>
                     )}
@@ -343,11 +389,13 @@ const SalesTerminal: React.FC<SalesTerminalProps> = ({ user, lang, notify }) => 
             <div className="flex flex-col gap-3">
               <button 
                 onClick={executeSale}
-                className="w-full py-5 bg-primary-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-primary-500/30 active:scale-95 transition-all"
+                disabled={isSelling}
+                className="w-full py-5 bg-primary-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-primary-500/30 active:scale-95 transition-all flex justify-center items-center gap-2"
               >
+                {isSelling && <Loader2 className="animate-spin w-4 h-4"/>}
                 {t.confirm}
               </button>
-              <button onClick={() => setShowConfirmSale(false)} className="w-full py-5 bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white rounded-2xl font-black text-sm uppercase tracking-widest active:scale-95 transition-all">
+              <button disabled={isSelling} onClick={() => setShowConfirmSale(false)} className="w-full py-5 bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white rounded-2xl font-black text-sm uppercase tracking-widest active:scale-95 transition-all">
                 {t.cancel}
               </button>
             </div>

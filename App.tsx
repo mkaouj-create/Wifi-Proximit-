@@ -15,7 +15,7 @@ import AgencyManager from './components/AgencyManager';
 import TaskManager from './components/TaskManager';
 import LandingPage from './components/LandingPage';
 import { supabase } from './services/supabase';
-import { UserProfile, UserRole, Agency } from './types';
+import { UserProfile, UserRole, Agency, AgencyModules } from './types';
 import { translations, Language } from './i18n';
 
 const App: React.FC = () => {
@@ -36,28 +36,45 @@ const App: React.FC = () => {
 
   const t = translations[lang];
 
+  // Gestion du thème sombre
   useEffect(() => {
-    document.documentElement.classList.toggle('dark', darkMode);
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
     localStorage.setItem('theme', darkMode ? 'dark' : 'light');
   }, [darkMode]);
 
+  // Initialisation de l'application
   useEffect(() => {
     const init = async () => {
-      const profile = await supabase.checkPersistedSession();
-      if (profile) {
-        setUser(profile);
-        setPinLocked(true);
+      try {
+        const profile = await supabase.checkPersistedSession();
+        if (profile) {
+          setUser(profile);
+          setPinLocked(true);
+          // Charger l'agence immédiatement si l'utilisateur est connecté
+          if (profile.agency_id) {
+            const agencyData = await supabase.getAgency(profile.agency_id);
+            setCurrentAgency(agencyData);
+          }
+        }
+      } catch (error) {
+        console.error("Erreur d'initialisation:", error);
+      } finally {
+        setIsAppLoading(false);
       }
-      setIsAppLoading(false);
     };
     init();
   }, []);
 
+  // Rechargement de l'agence si l'utilisateur change (ex: après login)
   useEffect(() => {
-    if (user?.agency_id) {
-      supabase.getAgency(user.agency_id).then(setCurrentAgency);
+    if (user?.agency_id && !currentAgency) {
+      supabase.getAgency(user.agency_id).then(setCurrentAgency).catch(console.error);
     }
-  }, [user]);
+  }, [user, currentAgency]);
 
   const notify = useCallback((type: 'success' | 'error' | 'info', message: string) => {
     setNotification({ type, message });
@@ -65,12 +82,18 @@ const App: React.FC = () => {
   }, []);
 
   const currentView = useMemo(() => {
+    if (isAppLoading) return 'LOADING';
     if (!user) return showLogin ? 'LOGIN' : 'LANDING';
     if (pinLocked) return 'LOCKED';
     if (currentAgency?.status === 'inactive') return 'SUSPENDED';
-    if (user.role !== UserRole.SUPER_ADMIN && !supabase.isSubscriptionActive(currentAgency)) return 'EXPIRED';
+    
+    // Vérification de l'abonnement (Sauf pour Super Admin)
+    if (user.role !== UserRole.SUPER_ADMIN && currentAgency && !supabase.isSubscriptionActive(currentAgency)) {
+      return 'EXPIRED';
+    }
+    
     return 'MAIN';
-  }, [user, showLogin, pinLocked, currentAgency]);
+  }, [user, showLogin, pinLocked, currentAgency, isAppLoading]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -79,56 +102,76 @@ const App: React.FC = () => {
       const profile = await supabase.signIn(loginEmail, loginPassword);
       if (profile) {
         setUser(profile);
-        setPinLocked(true);
+        setPinLocked(true); // Verrouiller par défaut après login pour sécurité
         setLoginPassword('');
-        notify('success', 'Connecté');
+        notify('success', 'Connecté avec succès');
       } else {
-        notify('error', "Échec de connexion");
+        notify('error', "Identifiants incorrects");
       }
     } catch (err) {
-      notify('error', "Erreur serveur");
+      notify('error', "Erreur de connexion au serveur");
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleLogout = () => {
-    if (user) supabase.signOut(user);
+  const handleLogout = async () => {
+    if (user) await supabase.signOut(user);
     setUser(null);
     setCurrentAgency(null);
     setPinLocked(false);
     setPin('');
     setShowLogin(false);
+    setLoginEmail('');
+    setLoginPassword('');
     notify('info', 'Déconnecté');
   };
 
   const handlePinSubmit = async (digit: string) => {
-    if (pin.length < 4) {
-      const nextPin = pin + digit;
-      setPin(nextPin);
-      if (nextPin.length === 4) {
-        setIsLoading(true);
-        const isValid = await supabase.verifyPin(user!.id, nextPin);
+    if (!user) return;
+    
+    // Éviter d'ajouter des chiffres si on est déjà à 4 ou en cours de chargement
+    if (pin.length >= 4 || isLoading) return;
+
+    const nextPin = pin + digit;
+    setPin(nextPin);
+
+    if (nextPin.length === 4) {
+      setIsLoading(true);
+      try {
+        const isValid = await supabase.verifyPin(user.id, nextPin);
         if (isValid) {
           setPinLocked(false);
           setPin('');
         } else {
-          notify('error', 'PIN Invalide');
+          notify('error', 'Code PIN incorrect');
           setPin('');
+          // Petit délai pour l'UX en cas d'erreur
+          await new Promise(r => setTimeout(r, 300));
         }
+      } catch (error) {
+        notify('error', 'Erreur de vérification');
+        setPin('');
+      } finally {
         setIsLoading(false);
       }
     }
   };
 
-  const canAccess = (tab: string) => {
-    if (user?.role === UserRole.SUPER_ADMIN) return true;
-    const modules = currentAgency?.settings?.modules;
-    if (!modules) return true;
-    return (modules as any)[tab] !== false;
-  };
+  const canAccess = useCallback((tab: string) => {
+    if (!user) return false;
+    if (user.role === UserRole.SUPER_ADMIN) return true;
+    
+    // Par défaut, accès limité si pas d'agence chargée (devrait être rare dans 'MAIN')
+    if (!currentAgency?.settings?.modules) return false;
+    
+    const modules = currentAgency.settings.modules as AgencyModules;
+    // Vérification type-safe
+    const moduleKey = tab as keyof AgencyModules;
+    return modules[moduleKey] !== false;
+  }, [user, currentAgency]);
 
-  if (isAppLoading) return (
+  if (currentView === 'LOADING') return (
     <div className="min-h-screen bg-white dark:bg-gray-950 flex flex-col items-center justify-center gap-4">
       <div className="w-12 h-12 bg-primary-600 rounded-2xl animate-bounce flex items-center justify-center text-white font-black text-xl">W</div>
       <Loader2 className="animate-spin text-primary-600" size={24} />
@@ -136,12 +179,12 @@ const App: React.FC = () => {
   );
 
   return (
-    <div className="font-inter transition-colors duration-300">
+    <div className="font-inter transition-colors duration-300 bg-gray-50 dark:bg-gray-950 min-h-screen text-gray-900 dark:text-gray-100">
       {notification && (
         <div className="fixed top-6 left-6 right-6 z-[100] animate-in slide-in-from-top duration-500 max-w-md mx-auto">
           <div className={`px-6 py-4 rounded-3xl shadow-2xl flex justify-between items-center text-white font-black uppercase text-[10px] ${notification.type === 'success' ? 'bg-green-600' : notification.type === 'error' ? 'bg-red-600' : 'bg-primary-600'}`}>
             <span>{notification.message}</span>
-            <button onClick={() => setNotification(null)}><X size={16}/></button>
+            <button onClick={() => setNotification(null)} className="ml-4 hover:opacity-80"><X size={16}/></button>
           </div>
         </div>
       )}
@@ -158,12 +201,28 @@ const App: React.FC = () => {
               <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest">SaaS Console</p>
             </div>
             <form onSubmit={handleLogin} className="space-y-4">
-              <input type="email" placeholder="Email" className="w-full p-5 bg-gray-50 dark:bg-gray-800 rounded-2xl font-bold dark:text-white outline-none" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} required />
+              <input 
+                type="email" 
+                placeholder="Email" 
+                className="w-full p-5 bg-gray-50 dark:bg-gray-800 rounded-2xl font-bold dark:text-white outline-none focus:ring-2 focus:ring-primary-500/20 transition-all" 
+                value={loginEmail} 
+                onChange={e => setLoginEmail(e.target.value)} 
+                required 
+              />
               <div className="relative">
-                <input type={showPassword ? "text" : "password"} placeholder="Password" className="w-full p-5 bg-gray-50 dark:bg-gray-800 rounded-2xl font-bold dark:text-white outline-none" value={loginPassword} onChange={e => setLoginPassword(e.target.value)} required />
-                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-6 top-1/2 -translate-y-1/2 text-gray-400">{showPassword ? <EyeOff size={20} /> : <Eye size={20} />}</button>
+                <input 
+                  type={showPassword ? "text" : "password"} 
+                  placeholder="Mot de passe" 
+                  className="w-full p-5 bg-gray-50 dark:bg-gray-800 rounded-2xl font-bold dark:text-white outline-none focus:ring-2 focus:ring-primary-500/20 transition-all" 
+                  value={loginPassword} 
+                  onChange={e => setLoginPassword(e.target.value)} 
+                  required 
+                />
+                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-6 top-1/2 -translate-y-1/2 text-gray-400 hover:text-primary-600">
+                  {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                </button>
               </div>
-              <button disabled={isLoading} className="w-full py-5 bg-primary-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl active:scale-[0.98] transition-all flex justify-center items-center gap-3">
+              <button disabled={isLoading} className="w-full py-5 bg-primary-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl active:scale-[0.98] transition-all flex justify-center items-center gap-3 disabled:opacity-70 disabled:cursor-not-allowed">
                 {isLoading ? <Loader2 className="animate-spin" size={20} /> : 'Se Connecter'}
               </button>
             </form>
@@ -171,26 +230,34 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {currentView === 'LOCKED' && (
+      {currentView === 'LOCKED' && user && (
         <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex flex-col items-center justify-center p-8 space-y-12 animate-in fade-in">
           <div className="text-center space-y-3">
             <div className="w-16 h-16 bg-primary-100 dark:bg-primary-900/20 text-primary-600 rounded-[1.5rem] flex items-center justify-center mx-auto shadow-xl"><KeyRound size={32} /></div>
             <h2 className="text-2xl font-black uppercase dark:text-white">Sécurité</h2>
-            <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest">{user?.display_name}</p>
+            <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest">{user.display_name}</p>
           </div>
           <div className="flex gap-4">
             {[0,1,2,3].map(i => (
-              <div key={i} className={`w-3 h-3 rounded-full border-2 border-primary-600 transition-all ${pin.length > i ? 'bg-primary-600 scale-125' : ''}`} />
+              <div key={i} className={`w-3 h-3 rounded-full border-2 border-primary-600 transition-all duration-300 ${pin.length > i ? 'bg-primary-600 scale-125' : 'bg-transparent'}`} />
             ))}
           </div>
           <div className="grid grid-cols-3 gap-6 max-w-[280px]">
             {[1,2,3,4,5,6,7,8,9,'C',0,'<'].map(val => (
-              <button key={val} onClick={() => { if(val === 'C') setPin(''); else if(val === '<') setPin(pin.slice(0,-1)); else handlePinSubmit(val.toString()); }} className="aspect-square bg-white dark:bg-gray-900 rounded-full font-black text-xl shadow-md active:bg-primary-600 active:text-white active:scale-90 transition-all dark:text-white border dark:border-gray-800">
+              <button 
+                key={val} 
+                onClick={() => { 
+                  if(val === 'C') setPin(''); 
+                  else if(val === '<') setPin(prev => prev.slice(0,-1)); 
+                  else handlePinSubmit(val.toString()); 
+                }} 
+                className="aspect-square bg-white dark:bg-gray-900 rounded-full font-black text-xl shadow-md active:bg-primary-600 active:text-white active:scale-90 transition-all dark:text-white border dark:border-gray-800 hover:border-primary-500/50"
+              >
                 {val}
               </button>
             ))}
           </div>
-          <button onClick={handleLogout} className="text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-red-500">Se déconnecter</button>
+          <button onClick={handleLogout} className="text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-red-500 transition-colors">Se déconnecter</button>
         </div>
       )}
 
@@ -199,47 +266,48 @@ const App: React.FC = () => {
           <div className={`w-24 h-24 rounded-[2rem] shadow-2xl flex items-center justify-center ${currentView === 'SUSPENDED' ? 'bg-red-50 text-red-500' : 'bg-amber-50 text-amber-500'}`}>
             {currentView === 'SUSPENDED' ? <ShieldAlert size={48} /> : <CalendarDays size={48} />}
           </div>
-          <h2 className="text-3xl font-black uppercase">{currentView === 'SUSPENDED' ? 'Accès Bloqué' : 'Licence Expirée'}</h2>
-          <p className="text-gray-500 max-w-xs">{currentView === 'SUSPENDED' ? 'Contactez le support.' : 'Renouvelez votre abonnement.'}</p>
-          <button onClick={handleLogout} className="px-10 py-4 bg-gray-900 dark:bg-white dark:text-gray-950 text-white rounded-2xl font-black uppercase text-[10px]">Déconnexion</button>
+          <h2 className="text-3xl font-black uppercase dark:text-white">{currentView === 'SUSPENDED' ? 'Accès Bloqué' : 'Licence Expirée'}</h2>
+          <p className="text-gray-500 dark:text-gray-400 max-w-xs font-medium">{currentView === 'SUSPENDED' ? 'Contactez le support.' : 'Renouvelez votre abonnement.'}</p>
+          <button onClick={handleLogout} className="px-10 py-4 bg-gray-900 dark:bg-white dark:text-gray-950 text-white rounded-2xl font-black uppercase text-[10px] hover:scale-105 transition-transform">Déconnexion</button>
         </div>
       )}
 
-      {currentView === 'MAIN' && (
+      {currentView === 'MAIN' && user && (
         <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex flex-col lg:flex-row transition-colors">
-          <aside className="hidden lg:flex fixed left-0 top-0 bottom-0 w-[280px] bg-white dark:bg-gray-900 border-r dark:border-gray-800 flex-col p-8 z-50">
+          <aside className="hidden lg:flex fixed left-0 top-0 bottom-0 w-[280px] bg-white dark:bg-gray-900 border-r dark:border-gray-800 flex-col p-8 z-50 shadow-sm">
             <div className="flex items-center gap-4 mb-14">
-              <div className="w-12 h-12 bg-primary-600 rounded-2xl flex items-center justify-center text-white font-black text-xl shadow-xl">W</div>
+              <div className="w-12 h-12 bg-primary-600 rounded-2xl flex items-center justify-center text-white font-black text-xl shadow-xl shadow-primary-600/20">W</div>
               <h1 className="text-xl font-black dark:text-white uppercase tracking-tighter">Wifi Pro</h1>
             </div>
-            <nav className="space-y-1 flex-1">
+            <nav className="space-y-1 flex-1 overflow-y-auto no-scrollbar">
               <NavItem icon={<LayoutDashboard/>} label={t.dashboard} active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
               {canAccess('sales') && <NavItem icon={<ShoppingBag/>} label={t.terminal} active={activeTab === 'sales'} onClick={() => setActiveTab('sales')} />}
               {canAccess('history') && <NavItem icon={<History/>} label={t.history} active={activeTab === 'history'} onClick={() => setActiveTab('history')} />}
               {canAccess('tickets') && <NavItem icon={<Database/>} label={t.tickets} active={activeTab === 'tickets'} onClick={() => setActiveTab('tickets')} />}
               {canAccess('tasks') && <NavItem icon={<ClipboardList/>} label={t.tasks} active={activeTab === 'tasks'} onClick={() => setActiveTab('tasks')} />}
+              
               <div className="pt-8 pb-4 opacity-30 text-[9px] font-black uppercase tracking-widest ml-4">Gestion</div>
-              {user!.role === UserRole.SUPER_ADMIN && <NavItem icon={<Building2/>} label={t.agencies} active={activeTab === 'agencies'} onClick={() => setActiveTab('agencies')} />}
-              {user!.role !== UserRole.SELLER && <NavItem icon={<Users/>} label={t.users} active={activeTab === 'users'} onClick={() => setActiveTab('users')} />}
-              {user!.role !== UserRole.SELLER && <NavItem icon={<Settings/>} label={t.settings} active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />}
+              {user.role === UserRole.SUPER_ADMIN && <NavItem icon={<Building2/>} label={t.agencies} active={activeTab === 'agencies'} onClick={() => setActiveTab('agencies')} />}
+              {user.role !== UserRole.SELLER && <NavItem icon={<Users/>} label={t.users} active={activeTab === 'users'} onClick={() => setActiveTab('users')} />}
+              {user.role !== UserRole.SELLER && <NavItem icon={<Settings/>} label={t.settings} active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />}
             </nav>
             <div className="mt-8 pt-8 border-t dark:border-gray-800 flex gap-2">
               <button onClick={() => setDarkMode(!darkMode)} className="p-4 bg-gray-50 dark:bg-gray-800 rounded-2xl text-gray-400 hover:text-primary-600 transition-all flex-1 flex justify-center">{darkMode ? <Sun size={20}/> : <Moon size={20}/>}</button>
-              <button onClick={() => setPinLocked(true)} className="p-4 bg-gray-50 dark:bg-gray-800 rounded-2xl text-gray-400 flex-1 flex justify-center"><Lock size={20}/></button>
-              <button onClick={handleLogout} className="p-4 bg-red-50 text-red-500 rounded-2xl flex-1 flex justify-center transition-all hover:bg-red-100"><Power size={20}/></button>
+              <button onClick={() => setPinLocked(true)} className="p-4 bg-gray-50 dark:bg-gray-800 rounded-2xl text-gray-400 hover:text-amber-500 transition-all flex-1 flex justify-center"><Lock size={20}/></button>
+              <button onClick={handleLogout} className="p-4 bg-red-50 dark:bg-red-900/10 text-red-500 rounded-2xl flex-1 flex justify-center transition-all hover:bg-red-100 dark:hover:bg-red-900/20"><Power size={20}/></button>
             </div>
           </aside>
 
           <main className="flex-1 lg:ml-[280px] p-4 md:p-10 lg:p-16 pb-32 max-w-full relative">
             <div className="max-w-7xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
-              {activeTab === 'dashboard' && <Dashboard user={user!} lang={lang} onNavigate={setActiveTab} notify={notify} />}
-              {activeTab === 'sales' && <SalesTerminal user={user!} lang={lang} notify={notify} />}
-              {activeTab === 'history' && <SalesHistory user={user!} lang={lang} />}
-              {activeTab === 'tickets' && <TicketManager user={user!} lang={lang} notify={notify} />}
-              {activeTab === 'tasks' && <TaskManager user={user!} lang={lang} />}
-              {activeTab === 'agencies' && <AgencyManager user={user!} lang={lang} notify={notify} />}
-              {activeTab === 'users' && <UserManagement user={user!} lang={lang} />}
-              {activeTab === 'settings' && <AgencySettings user={user!} lang={lang} />}
+              {activeTab === 'dashboard' && <Dashboard user={user} lang={lang} onNavigate={setActiveTab} notify={notify} />}
+              {activeTab === 'sales' && <SalesTerminal user={user} lang={lang} notify={notify} agency={currentAgency} />}
+              {activeTab === 'history' && <SalesHistory user={user} lang={lang} />}
+              {activeTab === 'tickets' && <TicketManager user={user} lang={lang} notify={notify} />}
+              {activeTab === 'tasks' && <TaskManager user={user} lang={lang} />}
+              {activeTab === 'agencies' && <AgencyManager user={user} lang={lang} notify={notify} />}
+              {activeTab === 'users' && <UserManagement user={user} lang={lang} />}
+              {activeTab === 'settings' && <AgencySettings user={user} lang={lang} />}
             </div>
           </main>
 
@@ -257,7 +325,7 @@ const App: React.FC = () => {
 };
 
 const NavItem = ({ icon, label, active, onClick }: any) => (
-  <button onClick={onClick} className={`flex items-center gap-4 w-full p-4 rounded-2xl font-black text-[11px] uppercase tracking-widest transition-all ${active ? 'bg-primary-600 text-white shadow-xl shadow-primary-500/30' : 'text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900'}`}>
+  <button onClick={onClick} className={`flex items-center gap-4 w-full p-4 rounded-2xl font-black text-[11px] uppercase tracking-widest transition-all ${active ? 'bg-primary-600 text-white shadow-xl shadow-primary-500/30' : 'text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'}`}>
     {React.cloneElement(icon, { size: 18 })} 
     <span>{label}</span>
   </button>
