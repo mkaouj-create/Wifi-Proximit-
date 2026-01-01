@@ -184,12 +184,12 @@ const App: React.FC = () => {
   );
 
   return (
-    <div className="font-inter transition-colors duration-300 bg-gray-50 dark:bg-gray-950 min-h-screen text-gray-900 dark:text-gray-100">
+    <div className="font-inter transition-colors duration-300 bg-gray-50 dark:bg-gray-950 min-h-screen text-gray-900 dark:text-gray-100 selection:bg-primary-500/20">
       {notification && (
-        <div className="fixed top-6 left-6 right-6 z-[100] animate-in slide-in-from-top duration-500 max-w-md mx-auto">
-          <div className={`px-6 py-4 rounded-3xl shadow-2xl flex justify-between items-center text-white font-black uppercase text-[10px] ${notification.type === 'success' ? 'bg-green-600' : notification.type === 'error' ? 'bg-red-600' : 'bg-primary-600'}`}>
+        <div className="fixed top-4 left-4 right-4 z-[100] animate-in slide-in-from-top duration-500 max-w-md mx-auto">
+          <div className={`px-5 py-3 rounded-2xl shadow-xl flex justify-between items-center text-white font-black uppercase text-[10px] tracking-widest ${notification.type === 'success' ? 'bg-green-600' : notification.type === 'error' ? 'bg-red-600' : 'bg-primary-600'}`}>
             <span>{notification.message}</span>
-            <button onClick={() => setNotification(null)} className="ml-4 hover:opacity-80"><X size={16}/></button>
+            <button onClick={() => setNotification(null)} className="ml-4 hover:opacity-80 p-1"><X size={14}/></button>
           </div>
         </div>
       )}
@@ -197,11 +197,11 @@ const App: React.FC = () => {
       {currentView === 'LANDING' && <LandingPage onLoginClick={() => setShowLogin(true)} />}
       
       {currentView === 'LOGIN' && (
-        <div className="min-h-screen bg-primary-600 dark:bg-gray-950 flex items-center justify-center p-6">
-          <div className="bg-white dark:bg-gray-900 w-full max-w-sm rounded-[3rem] p-10 shadow-2xl relative animate-in zoom-in">
-            <button onClick={() => setShowLogin(false)} className="absolute top-8 left-8 p-3 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-2xl transition-all"><ArrowLeft size={24} /></button>
-            <div className="text-center pt-10 mb-10">
-              <div className="w-20 h-20 bg-primary-50 dark:bg-primary-900/30 text-primary-600 rounded-[2rem] flex items-center justify-center mx-auto mb-4 shadow-inner"><Lock size={32} /></div>
+        <div className="min-h-screen bg-primary-600 dark:bg-gray-950 flex items-center justify-center p-4 sm:p-6">
+          <div className="bg-white dark:bg-gray-900 w-full max-w-sm rounded-[2.5rem] p-8 md:p-10 shadow-2xl relative animate-in zoom-in duration-300">
+            <button onClick={() => setShowLogin(false)} className="absolute top-6 left-6 p-2 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-2xl transition-all"><ArrowLeft size={24} /></button>
+            <div className="text-center pt-8 mb-8">
+              <div className="w-16 h-16 bg-primary-50 dark:bg-primary-900/30 text-primary-600 rounded-[2rem] flex items-center justify-center mx-auto mb-4 shadow-inner"><Lock size={28} /></div>
               <h1 className="text-2xl font-black uppercase tracking-tighter dark:text-white">Wifi Pro</h1>
               <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest">SaaS Console</p>
             </div>
@@ -209,7 +209,7 @@ const App: React.FC = () => {
               <input 
                 type="email" 
                 placeholder="Email" 
-                className="w-full p-5 bg-gray-50 dark:bg-gray-800 rounded-2xl font-bold dark:text-white outline-none focus:ring-2 focus:ring-primary-500/20 transition-all" 
+                className="w-full p-4 md:p-5 bg-gray-50 dark:bg-gray-800 rounded-2xl font-bold dark:text-white outline-none focus:ring-2 focus:ring-primary-500/20 transition-all text-sm md:text-base" 
                 value={loginEmail} 
                 onChange={e => setLoginEmail(e.target.value)} 
                 required 
@@ -218,17 +218,17 @@ const App: React.FC = () => {
                 <input 
                   type={showPassword ? "text" : "password"} 
                   placeholder="Mot de passe" 
-                  className="w-full p-5 bg-gray-50 dark:bg-gray-800 rounded-2xl font-bold dark:text-white outline-none focus:ring-2 focus:ring-primary-500/20 transition-all" 
+                  className="w-full p-4 md:p-5 bg-gray-50 dark:bg-gray-800 rounded-2xl font-bold dark:text-white outline-none focus:ring-2 focus:ring-primary-500/20 transition-all text-sm md:text-base" 
                   value={loginPassword} 
                   onChange={e => setLoginPassword(e.target.value)} 
                   required 
                 />
-                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-6 top-1/2 -translate-y-1/2 text-gray-400 hover:text-primary-600">
-                  {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-primary-600 p-2">
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>
-              <button disabled={isLoading} className="w-full py-5 bg-primary-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl active:scale-[0.98] transition-all flex justify-center items-center gap-3 disabled:opacity-70 disabled:cursor-not-allowed">
-                {isLoading ? <Loader2 className="animate-spin" size={20} /> : 'Se Connecter'}
+              <button disabled={isLoading} className="w-full py-4 md:py-5 bg-primary-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl active:scale-[0.98] transition-all flex justify-center items-center gap-3 disabled:opacity-70 disabled:cursor-not-allowed text-xs md:text-sm">
+                {isLoading ? <Loader2 className="animate-spin" size={18} /> : 'Se Connecter'}
               </button>
             </form>
           </div>
@@ -236,10 +236,10 @@ const App: React.FC = () => {
       )}
 
       {currentView === 'LOCKED' && user && (
-        <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex flex-col items-center justify-center p-8 space-y-12 animate-in fade-in">
+        <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex flex-col items-center justify-center p-6 space-y-8 md:space-y-12 animate-in fade-in">
           <div className="text-center space-y-3">
-            <div className="w-16 h-16 bg-primary-100 dark:bg-primary-900/20 text-primary-600 rounded-[1.5rem] flex items-center justify-center mx-auto shadow-xl"><KeyRound size={32} /></div>
-            <h2 className="text-2xl font-black uppercase dark:text-white">Sécurité</h2>
+            <div className="w-14 h-14 bg-primary-100 dark:bg-primary-900/20 text-primary-600 rounded-[1.5rem] flex items-center justify-center mx-auto shadow-xl"><KeyRound size={28} /></div>
+            <h2 className="text-xl md:text-2xl font-black uppercase dark:text-white">Sécurité</h2>
             <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest">{user.display_name}</p>
           </div>
           <div className="flex gap-4">
@@ -247,7 +247,7 @@ const App: React.FC = () => {
               <div key={i} className={`w-3 h-3 rounded-full border-2 border-primary-600 transition-all duration-300 ${pin.length > i ? 'bg-primary-600 scale-125' : 'bg-transparent'}`} />
             ))}
           </div>
-          <div className="grid grid-cols-3 gap-6 max-w-[280px]">
+          <div className="grid grid-cols-3 gap-4 md:gap-6 max-w-[280px] w-full">
             {[1,2,3,4,5,6,7,8,9,'C',0,'<'].map(val => (
               <button 
                 key={val} 
@@ -256,29 +256,30 @@ const App: React.FC = () => {
                   else if(val === '<') setPin(prev => prev.slice(0,-1)); 
                   else handlePinSubmit(val.toString()); 
                 }} 
-                className="aspect-square bg-white dark:bg-gray-900 rounded-full font-black text-xl shadow-md active:bg-primary-600 active:text-white active:scale-90 transition-all dark:text-white border dark:border-gray-800 hover:border-primary-500/50"
+                className="aspect-square bg-white dark:bg-gray-900 rounded-full font-black text-lg md:text-xl shadow-md active:bg-primary-600 active:text-white active:scale-90 transition-all dark:text-white border dark:border-gray-800 hover:border-primary-500/50 flex items-center justify-center"
               >
                 {val}
               </button>
             ))}
           </div>
-          <button onClick={handleLogout} className="text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-red-500 transition-colors">Se déconnecter</button>
+          <button onClick={handleLogout} className="text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-red-500 transition-colors p-2">Se déconnecter</button>
         </div>
       )}
 
       {(currentView === 'SUSPENDED' || currentView === 'EXPIRED') && (
-        <div className="min-h-screen bg-white dark:bg-gray-950 flex flex-col items-center justify-center p-10 text-center space-y-6">
-          <div className={`w-24 h-24 rounded-[2rem] shadow-2xl flex items-center justify-center ${currentView === 'SUSPENDED' ? 'bg-red-50 text-red-500' : 'bg-amber-50 text-amber-500'}`}>
-            {currentView === 'SUSPENDED' ? <ShieldAlert size={48} /> : <CalendarDays size={48} />}
+        <div className="min-h-screen bg-white dark:bg-gray-950 flex flex-col items-center justify-center p-6 text-center space-y-6">
+          <div className={`w-20 h-20 rounded-[2rem] shadow-2xl flex items-center justify-center ${currentView === 'SUSPENDED' ? 'bg-red-50 text-red-500' : 'bg-amber-50 text-amber-500'}`}>
+            {currentView === 'SUSPENDED' ? <ShieldAlert size={40} /> : <CalendarDays size={40} />}
           </div>
-          <h2 className="text-3xl font-black uppercase dark:text-white">{currentView === 'SUSPENDED' ? 'Accès Bloqué' : 'Licence Expirée'}</h2>
-          <p className="text-gray-500 dark:text-gray-400 max-w-xs font-medium">{currentView === 'SUSPENDED' ? 'Contactez le support.' : 'Renouvelez votre abonnement.'}</p>
-          <button onClick={handleLogout} className="px-10 py-4 bg-gray-900 dark:bg-white dark:text-gray-950 text-white rounded-2xl font-black uppercase text-[10px] hover:scale-105 transition-transform">Déconnexion</button>
+          <h2 className="text-2xl md:text-3xl font-black uppercase dark:text-white">{currentView === 'SUSPENDED' ? 'Accès Bloqué' : 'Licence Expirée'}</h2>
+          <p className="text-gray-500 dark:text-gray-400 max-w-xs font-medium text-sm">{currentView === 'SUSPENDED' ? 'Contactez le support.' : 'Renouvelez votre abonnement.'}</p>
+          <button onClick={handleLogout} className="px-8 py-4 bg-gray-900 dark:bg-white dark:text-gray-950 text-white rounded-2xl font-black uppercase text-[10px] hover:scale-105 transition-transform">Déconnexion</button>
         </div>
       )}
 
       {currentView === 'MAIN' && user && (
         <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex flex-col lg:flex-row transition-colors">
+          {/* DESKTOP SIDEBAR */}
           <aside className="hidden lg:flex fixed left-0 top-0 bottom-0 w-[280px] bg-white dark:bg-gray-900 border-r dark:border-gray-800 flex-col p-8 z-50 shadow-sm">
             <div className="flex items-center gap-4 mb-14">
               <div className="w-12 h-12 bg-primary-600 rounded-2xl flex items-center justify-center text-white font-black text-xl shadow-xl shadow-primary-600/20">W</div>
@@ -297,14 +298,16 @@ const App: React.FC = () => {
               {user.role !== UserRole.SELLER && <NavItem icon={<Settings/>} label={t.settings} active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />}
             </nav>
             <div className="mt-8 pt-8 border-t dark:border-gray-800 flex gap-2">
-              <button onClick={() => setDarkMode(!darkMode)} className="p-4 bg-gray-50 dark:bg-gray-800 rounded-2xl text-gray-400 hover:text-primary-600 transition-all flex-1 flex justify-center">{darkMode ? <Sun size={20}/> : <Moon size={20}/>}</button>
-              <button onClick={() => setPinLocked(true)} className="p-4 bg-gray-50 dark:bg-gray-800 rounded-2xl text-gray-400 hover:text-amber-500 transition-all flex-1 flex justify-center"><Lock size={20}/></button>
-              <button onClick={handleLogout} className="p-4 bg-red-50 dark:bg-red-900/10 text-red-500 rounded-2xl flex-1 flex justify-center transition-all hover:bg-red-100 dark:hover:bg-red-900/20"><Power size={20}/></button>
+              <button onClick={() => setDarkMode(!darkMode)} className="p-3 bg-gray-50 dark:bg-gray-800 rounded-xl text-gray-400 hover:text-primary-600 transition-all flex-1 flex justify-center">{darkMode ? <Sun size={18}/> : <Moon size={18}/>}</button>
+              <button onClick={() => setPinLocked(true)} className="p-3 bg-gray-50 dark:bg-gray-800 rounded-xl text-gray-400 hover:text-amber-500 transition-all flex-1 flex justify-center"><Lock size={18}/></button>
+              <button onClick={handleLogout} className="p-3 bg-red-50 dark:bg-red-900/10 text-red-500 rounded-xl flex-1 flex justify-center transition-all hover:bg-red-100 dark:hover:bg-red-900/20"><Power size={18}/></button>
             </div>
           </aside>
 
-          <main className="flex-1 lg:ml-[280px] p-4 md:p-10 lg:p-16 pb-32 max-w-full relative">
-            <div className="max-w-7xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
+          {/* MAIN CONTENT AREA */}
+          <main className="flex-1 lg:ml-[280px] w-full max-w-full relative pb-32 lg:pb-10">
+             {/* Padding Responsive: p-4 sur mobile, p-10/16 sur desktop */}
+             <div className="p-4 md:p-10 lg:p-12 max-w-7xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
               {activeTab === 'dashboard' && <Dashboard user={user} lang={lang} onNavigate={setActiveTab} notify={notify} />}
               {activeTab === 'sales' && <SalesTerminal user={user} lang={lang} notify={notify} agency={currentAgency} />}
               {activeTab === 'history' && <SalesHistory user={user} lang={lang} />}
@@ -316,9 +319,10 @@ const App: React.FC = () => {
             </div>
           </main>
 
-          <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-gray-950/90 backdrop-blur-2xl border-t dark:border-gray-800 flex justify-around p-4 safe-bottom z-50 rounded-t-[2.5rem] shadow-2xl">
+          {/* MOBILE BOTTOM NAVIGATION */}
+          <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-gray-950/90 backdrop-blur-xl border-t dark:border-gray-800 flex justify-around items-center p-2 z-50 shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.1)] safe-bottom pb-[max(1rem,env(safe-area-inset-bottom))]">
             <MobNavItem icon={<LayoutDashboard/>} active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
-            {canAccess('sales') && <MobNavItem icon={<ShoppingBag/>} active={activeTab === 'sales'} onClick={() => setActiveTab('sales')} />}
+            {canAccess('sales') && <MobNavItem icon={<ShoppingBag/>} active={activeTab === 'sales'} onClick={() => setActiveTab('sales')} highlight />}
             {canAccess('tickets') && <MobNavItem icon={<Database/>} active={activeTab === 'tickets'} onClick={() => setActiveTab('tickets')} />}
             {canAccess('history') && <MobNavItem icon={<History/>} active={activeTab === 'history'} onClick={() => setActiveTab('history')} />}
             <MobNavItem icon={<Settings/>} active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />
@@ -336,9 +340,10 @@ const NavItem = ({ icon, label, active, onClick }: any) => (
   </button>
 );
 
-const MobNavItem = ({ icon, active, onClick }: any) => (
-  <button onClick={onClick} className={`p-4 rounded-2xl transition-all ${active ? 'bg-primary-50 dark:bg-primary-900/30 text-primary-600' : 'text-gray-400 opacity-60'}`}>
-    {React.cloneElement(icon, { size: 24 })}
+const MobNavItem = ({ icon, active, onClick, highlight }: any) => (
+  <button onClick={onClick} className={`p-4 rounded-2xl transition-all relative ${active ? 'text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/30' : 'text-gray-400'} ${highlight && !active ? 'text-gray-500' : ''}`}>
+    {React.cloneElement(icon, { size: active ? 24 : 22, strokeWidth: active ? 2.5 : 2 })}
+    {highlight && !active && <div className="absolute top-3 right-3 w-2 h-2 bg-primary-500 rounded-full border-2 border-white dark:border-gray-950" />}
   </button>
 );
 
