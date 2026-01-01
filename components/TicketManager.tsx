@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Search, FileUp, X, Edit2, Trash2, Loader2, Tags, Layers, AlertTriangle, CheckCircle2, Info, Coins, Hash } from 'lucide-react';
+import { Search, FileUp, X, Edit2, Trash2, Loader2, Layers, Coins, Hash } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import { Ticket, UserProfile, TicketStatus, UserRole, Agency } from '../types';
 import { translations, Language } from '../i18n';
@@ -36,7 +35,7 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
     } finally {
       setLoading(false);
     }
-  }, [user, isSuper]);
+  }, [user, isSuper, notify]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -51,8 +50,11 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
     
     setLoading(true);
     const reader = new FileReader();
+    
     reader.onload = async (ev) => {
       const text = ev.target?.result as string;
+      if (!text) return;
+
       const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
       
       if (lines.length < 1) {
@@ -61,6 +63,7 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
           return;
       }
 
+      // Analyse intelligente des en-têtes pour supporter différents formats CSV
       const headers = lines[0].toLowerCase().split(/[;,]/).map(h => h.trim().replace(/^["']|["']$/g, ''));
       
       const idx = {
@@ -71,11 +74,13 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
         price: headers.findIndex(h => h.includes('price') || h.includes('prix') || h === 'amount' || h === 'tarif')
       };
 
+      // Détection format Mikhmon standard vs CSV générique
       const isMikhmonStandard = idx.user !== -1 && idx.prof !== -1;
       const dataLines = isMikhmonStandard ? lines.slice(1) : lines;
 
       const rows = dataLines.map(line => {
         const p = line.split(/[;,]/).map(v => v.replace(/^["']|["']$/g, '').trim());
+        // Fallback sur les indices 0,1,2,3 si en-têtes non trouvés
         return { 
             username: isMikhmonStandard ? p[idx.user] : p[0], 
             password: idx.pass !== -1 ? p[idx.pass] : (isMikhmonStandard ? p[idx.pass] : p[1] || p[0]), 
@@ -99,12 +104,12 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
         setShowImport(false);
         loadData();
       } catch (err: any) {
-        notify('error', err.message || "Une erreur est survenue lors de l'importation.");
+        notify('error', err.message || "Erreur d'importation.");
       }
       setLoading(false);
     };
     reader.readAsText(file);
-    e.target.value = '';
+    e.target.value = ''; // Reset input
   };
 
   const handleBulkUpdate = async (e: React.FormEvent) => {
@@ -113,8 +118,6 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
 
     setLoading(true);
     try {
-      // Pour les Super Admin, on utilise selectedAgency (qui peut être 'ALL')
-      // Pour les autres, on laisse le service gérer avec l'ID de l'acteur
       const count = await supabase.updateProfilePrices(
         isSuper ? selectedAgency : null, 
         bulkProfile, 
@@ -144,12 +147,14 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
     return <span className={`px-2 md:px-3 py-1 rounded-lg text-[8px] md:text-[9px] font-black uppercase tracking-tighter ${c.color}`}>{c.label}</span>;
   };
 
-  const filtered = tickets.filter(tk => {
-    const mSearch = tk.username.toLowerCase().includes(search.toLowerCase()) || tk.profile.toLowerCase().includes(search.toLowerCase());
-    const mStatus = filterStatus === 'ALL' || tk.status === filterStatus;
-    const mAgency = selectedAgency === 'ALL' || tk.agency_id === selectedAgency;
-    return mSearch && mStatus && mAgency;
-  });
+  const filtered = useMemo(() => {
+    return tickets.filter(tk => {
+        const mSearch = tk.username.toLowerCase().includes(search.toLowerCase()) || tk.profile.toLowerCase().includes(search.toLowerCase());
+        const mStatus = filterStatus === 'ALL' || tk.status === filterStatus;
+        const mAgency = selectedAgency === 'ALL' || tk.agency_id === selectedAgency;
+        return mSearch && mStatus && mAgency;
+      });
+  }, [tickets, search, filterStatus, selectedAgency]);
 
   return (
     <div className="space-y-6 animate-in slide-in-from-bottom-2 duration-500">

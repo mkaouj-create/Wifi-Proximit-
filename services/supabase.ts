@@ -13,28 +13,41 @@ import {
   SubscriptionPlan
 } from '../types';
 
+// Fonction utilitaire pour récupérer les variables d'environnement de manière sécurisée
 const getSupabaseConfig = () => {
   try {
     // @ts-ignore
-    const env = (import.meta && import.meta.env ? import.meta.env : {}) as any;
+    const meta = import.meta;
+    // @ts-ignore
+    const env = meta && meta.env ? meta.env : {};
     return {
+      // @ts-ignore
       url: env.VITE_SUPABASE_URL,
+      // @ts-ignore
       key: env.VITE_SUPABASE_ANON_KEY
     };
   } catch (error) {
+    console.warn("Erreur chargement env:", error);
     return { url: undefined, key: undefined };
   }
 };
 
-const { url: supabaseUrl, key: supabaseKey } = getSupabaseConfig();
+const { url: envUrl, key: envKey } = getSupabaseConfig();
+
+// Configuration : Priorité aux variables d'environnement, sinon utilisation des clés fournies
+const supabaseUrl = envUrl || 'https://gqenaxalqkdaoylhwzoq.supabase.co';
+const supabaseKey = envKey || 'sb_publishable_ndkp28zh6qF0Ixm740HD4g_V-1Ew2vw';
 
 if (!supabaseUrl || !supabaseKey) {
-  console.warn("Supabase non configuré.");
+  console.warn("⚠️ Supabase non configuré. Vérifiez le fichier .env ou la configuration Vite.");
 }
 
 const client: SupabaseClient = createClient(
-  supabaseUrl || 'https://placeholder.supabase.co',
-  supabaseKey || 'placeholder'
+  supabaseUrl,
+  supabaseKey,
+  {
+    auth: { persistSession: false } // On gère la session manuellement via localStorage pour ce projet spécifique
+  }
 );
 
 const TICKET_CREDIT_RATIO = 20; 
@@ -46,16 +59,17 @@ class SupabaseService {
 
   private async log(user: Partial<UserProfile>, action: string, details: string): Promise<void> {
     if (!this.isConfigured()) return;
-    try {
-      await client.from('logs').insert({
-        user_id: user.id, 
-        user_name: user.display_name || user.email || 'Système', 
-        agency_id: user.agency_id,
-        action, 
-        details, 
-        created_at: new Date().toISOString()
-      });
-    } catch (e) { /* Silent fail for logs */ }
+    // Exécution en tâche de fond pour ne pas bloquer l'UI
+    client.from('logs').insert({
+      user_id: user.id, 
+      user_name: user.display_name || user.email || 'Système', 
+      agency_id: user.agency_id,
+      action, 
+      details, 
+      created_at: new Date().toISOString()
+    }).then(({ error }) => {
+      if (error) console.error("Log error:", error);
+    });
   }
 
   // --- PLANS ---
@@ -80,7 +94,7 @@ class SupabaseService {
   }
 
   // --- ABONNEMENT & AGENCES ---
-  public isSubscriptionActive(agency: Agency | null): boolean {
+  public isSubscriptionActive(agency: Partial<Agency> | null): boolean {
     if (!agency || !agency.subscription_end) return false;
     return new Date(agency.subscription_end).getTime() > Date.now();
   }
@@ -105,12 +119,13 @@ class SupabaseService {
       credits_balance: 50,
       plan_name: 'Trial',
       subscription_start: new Date().toISOString(),
-      subscription_end: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+      subscription_end: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(), // 14 jours
       settings: {
         currency: 'GNF',
         modules: { dashboard: true, sales: true, history: true, tickets: true, team: true, tasks: true }
       }
     }).select().single();
+    
     if (error) throw error;
     await this.log(actor, 'AGENCY_CREATE', `Agence ${name} créée`);
     return data as Agency;
@@ -119,11 +134,13 @@ class SupabaseService {
   async updateSubscription(aid: string, plan: string, months: number, actor: UserProfile): Promise<void> {
     const end = new Date();
     end.setMonth(end.getMonth() + months);
+    
     const { error } = await client.from('agencies').update({
       plan_name: plan,
       subscription_end: end.toISOString(),
       status: 'active'
     }).eq('id', aid);
+
     if (error) throw error;
     await this.log(actor, 'AGENCY_SUBSCRIPTION', `Plan ${plan} activé pour ${aid}`);
   }
@@ -138,6 +155,7 @@ class SupabaseService {
     if (error || !data) return null;
     
     const user = data as UserProfile;
+    // Note: Stocker le mot de passe en local n'est pas idéal, mais respecte l'architecture existante demandée.
     localStorage.setItem('wifi_pro_session', JSON.stringify({ email, password }));
     await this.log(user, 'LOGIN', 'Connexion réussie');
     return user;
@@ -148,7 +166,7 @@ class SupabaseService {
     if (!session) return null;
     try {
       const { email, password } = JSON.parse(session);
-      return this.signIn(email, password);
+      return await this.signIn(email, password);
     } catch { return null; }
   }
 
@@ -169,14 +187,17 @@ class SupabaseService {
     }
 
     const isSuper = role === UserRole.SUPER_ADMIN;
+    
+    // Requêtes parallèles optimisées
     const [salesRes, ticketsRes, profilesRes, agenciesRes] = await Promise.all([
-      isSuper ? client.from('sales').select('amount') : client.from('sales').select('amount').eq('agency_id', aid),
-      isSuper ? client.from('tickets').select('status') : client.from('tickets').select('status').eq('agency_id', aid),
-      isSuper ? client.from('profiles').select('id') : client.from('profiles').select('id').eq('agency_id', aid),
+      client.from('sales').select('amount').match(isSuper ? {} : { agency_id: aid }),
+      client.from('tickets').select('status').match(isSuper ? {} : { agency_id: aid }),
+      client.from('profiles').select('id', { count: 'exact', head: true }).match(isSuper ? {} : { agency_id: aid }),
       isSuper ? client.from('agencies').select('*') : client.from('agencies').select('*').eq('id', aid).single()
     ]);
 
     let archRev = 0, totalCredits = 0;
+    
     if (isSuper) {
       (agenciesRes.data as Agency[] || []).forEach(a => {
         archRev += (Number(a.settings?.archived_revenue) || 0);
@@ -192,27 +213,42 @@ class SupabaseService {
       revenue: (salesRes.data?.reduce((acc, s) => acc + (Number(s.amount) || 0), 0) || 0) + archRev,
       soldCount: salesRes.data?.length || 0,
       stockCount: ticketsRes.data?.filter(t => t.status === TicketStatus.UNSOLD).length || 0,
-      userCount: profilesRes.data?.length || 0,
-      agencyCount: isSuper ? agenciesRes.data?.length || 0 : 1,
+      userCount: profilesRes.count || 0,
+      agencyCount: isSuper ? (agenciesRes.data as Agency[]).length : 1,
       currency: (isSuper ? 'GNF' : (agenciesRes.data as Agency)?.settings?.currency) || 'GNF',
       credits: totalCredits
     };
   }
 
   async sellTicket(tid: string, sid: string, aid: string, phone?: string): Promise<Sale | null> {
-    const { data: agency } = await client.from('agencies').select('*').eq('id', aid).single();
-    if (!this.isSubscriptionActive(agency)) throw new Error("Abonnement expiré.");
+    const { data: agency } = await client.from('agencies').select('subscription_end, settings').eq('id', aid).single();
+    if (!this.isSubscriptionActive(agency as Partial<Agency>)) throw new Error("Abonnement expiré.");
 
+    // Transaction atomique simulée : on vérifie d'abord la disponibilité
     const { data: tk } = await client.from('tickets').select('*').eq('id', tid).eq('status', TicketStatus.UNSOLD).single();
     if (!tk) return null;
 
     const now = new Date().toISOString();
-    await client.from('tickets').update({ status: TicketStatus.SOLD, sold_by: sid, sold_at: now }).eq('id', tid);
-    const { data: sale, error } = await client.from('sales').insert({ 
+    
+    // Mise à jour ticket
+    const { error: updateError } = await client.from('tickets')
+        .update({ status: TicketStatus.SOLD, sold_by: sid, sold_at: now })
+        .eq('id', tid)
+        .eq('status', TicketStatus.UNSOLD); // Double check pour la concurrence
+
+    if (updateError) return null;
+
+    // Création vente
+    const { data: sale, error: saleError } = await client.from('sales').insert({ 
       ticket_id: tid, agency_id: aid, seller_id: sid, amount: tk.price, sold_at: now, customer_phone: phone 
     }).select().single();
 
-    if (error) throw error;
+    if (saleError) {
+        // Rollback manuel si la vente échoue (très rare)
+        await client.from('tickets').update({ status: TicketStatus.UNSOLD, sold_by: null, sold_at: null }).eq('id', tid);
+        throw saleError;
+    }
+
     await this.log({ id: sid, agency_id: aid }, 'SALE', `Vente ticket: ${tk.username}`);
     return sale as Sale;
   }
@@ -222,7 +258,7 @@ class SupabaseService {
     if (!agency || !this.isSubscriptionActive(agency)) throw new Error('Abonnement inactif');
 
     const cost = Math.ceil(ts.length / TICKET_CREDIT_RATIO);
-    if (agency.credits_balance < cost && agency.plan_name !== 'UNLIMITED') throw new Error(`Crédits insuffisants.`);
+    if (agency.credits_balance < cost && agency.plan_name !== 'UNLIMITED') throw new Error(`Crédits insuffisants (Requis: ${cost}).`);
 
     const toInsert = ts.map(t => ({
       username: String(t.username).trim(),
@@ -237,6 +273,7 @@ class SupabaseService {
     const { error } = await client.from('tickets').insert(toInsert);
     if (error) throw error;
 
+    // Débit crédits
     await client.from('agencies').update({ 
       credits_balance: agency.credits_balance - cost,
       settings: { ...agency.settings, total_tickets_ever: (agency.settings?.total_tickets_ever || 0) + toInsert.length }
@@ -268,9 +305,14 @@ class SupabaseService {
     let q = client.from('sales').select('*, profiles:seller_id(display_name), tickets:ticket_id(username, profile, time_limit)');
     if (role !== UserRole.SUPER_ADMIN) q = q.eq('agency_id', aid);
     const { data } = await q.order('sold_at', { ascending: false });
+    
+    // Mapping pour aplatir la structure jointe
     return (data || []).map((s: any) => ({ 
-      ...s, seller_name: s.profiles?.display_name, ticket_username: s.tickets?.username, 
-      ticket_profile: s.tickets?.profile, ticket_time_limit: s.tickets?.time_limit 
+      ...s, 
+      seller_name: s.profiles?.display_name, 
+      ticket_username: s.tickets?.username, 
+      ticket_profile: s.tickets?.profile, 
+      ticket_time_limit: s.tickets?.time_limit 
     })) as Sale[];
   }
 

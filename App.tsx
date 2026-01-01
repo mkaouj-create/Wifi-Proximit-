@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   LayoutDashboard, ShoppingBag, Database, Users, Lock, Sun, Moon, 
@@ -84,10 +83,10 @@ const App: React.FC = () => {
         setLoginPassword('');
         notify('success', 'Connecté');
       } else {
-        notify('error', "Échec");
+        notify('error', "Échec de connexion");
       }
     } catch (err) {
-      notify('error', "Erreur");
+      notify('error', "Erreur serveur");
     } finally {
       setIsLoading(false);
     }
@@ -114,7 +113,7 @@ const App: React.FC = () => {
           setPinLocked(false);
           setPin('');
         } else {
-          notify('error', 'Invalide');
+          notify('error', 'PIN Invalide');
           setPin('');
         }
         setIsLoading(false);

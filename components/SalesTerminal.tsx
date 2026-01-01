@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
-import { ShoppingCart, Phone, CheckCircle2, Share2, AlertCircle, Sparkles, Loader2, Copy, Info } from 'lucide-react';
+import { ShoppingCart, Phone, CheckCircle2, Share2, Loader2, Copy, Info, Sparkles } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import { Ticket, UserProfile, TicketStatus, Agency } from '../types';
 import { translations, Language } from '../i18n';
@@ -55,25 +54,25 @@ const SalesTerminal: React.FC<SalesTerminalProps> = ({ user, lang, notify }) => 
   const handleCopy = async () => {
     if (!soldTicketInfo) return;
     const text = getReceiptMessage(soldTicketInfo);
+    
     try {
-      if (navigator.clipboard && window.isSecureContext) {
-        await navigator.clipboard.writeText(text);
-        notify('success', 'Reçu copié dans le presse-papier');
-      } else {
-        const textArea = document.createElement("textarea");
-        textArea.value = text;
-        textArea.style.position = "fixed";
-        textArea.style.left = "-9999px";
-        textArea.style.top = "0";
-        document.body.appendChild(textArea);
-        textArea.focus();
-        textArea.select();
-        const successful = document.execCommand('copy');
-        document.body.removeChild(textArea);
-        if (successful) notify('success', 'Reçu copié (fallback)');
-      }
+      await navigator.clipboard.writeText(text);
+      notify('success', 'Reçu copié !');
     } catch (err) {
-      notify('error', 'Échec de la copie');
+      // Fallback robuste
+      const textArea = document.createElement("textarea");
+      textArea.value = text;
+      textArea.style.position = "fixed";
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      try {
+        document.execCommand('copy');
+        notify('success', 'Reçu copié !');
+      } catch (e) {
+        notify('error', 'Échec de la copie');
+      }
+      document.body.removeChild(textArea);
     }
   };
 
@@ -93,12 +92,9 @@ const SalesTerminal: React.FC<SalesTerminalProps> = ({ user, lang, notify }) => 
     }
     
     const win = window.open(url, '_blank', 'noopener,noreferrer');
-    
     if (!win) {
       handleCopy();
-      notify('info', "Reçu copié car WhatsApp n'a pu s'ouvrir");
-    } else {
-      notify('success', "Partage WhatsApp en cours...");
+      notify('info', "Popup bloqué. Reçu copié.");
     }
   };
 
@@ -116,10 +112,11 @@ const SalesTerminal: React.FC<SalesTerminalProps> = ({ user, lang, notify }) => 
         setSoldTicketInfo(ticketToSell);
         setShowReceipt(true);
         notify('success', 'Vente réussie !');
-        const updatedTickets = await supabase.getTickets(user.agency_id, user.role);
-        setAvailableTickets(updatedTickets.filter(t => t.status === TicketStatus.UNSOLD));
+        // Mise à jour optimiste ou re-fetch
+        loadData();
       } else {
         notify('error', 'Le ticket sélectionné n\'est plus disponible.');
+        loadData(); // Rafraîchir pour être sûr
       }
     } catch (err) {
       notify('error', "Une erreur est survenue lors de la vente.");
@@ -273,9 +270,9 @@ const SalesTerminal: React.FC<SalesTerminalProps> = ({ user, lang, notify }) => 
             </div>
           ) : (
             <div className="p-16 text-center bg-white dark:bg-gray-800 rounded-[2.5rem] border-2 border-dashed border-gray-100 dark:border-gray-700 shadow-sm">
-              <AlertCircle className="w-12 h-12 md:w-16 md:h-16 text-gray-200 mx-auto mb-4" />
+              <Sparkles className="w-12 h-12 md:w-16 md:h-16 text-gray-200 mx-auto mb-4" />
               <p className="text-gray-400 font-black uppercase tracking-widest leading-none">Stock Épuisé</p>
-              <p className="text-[10px] text-gray-400 mt-2 max-w-[200px] mx-auto leading-relaxed">Veuillez importer de nouveaux tickets pour reprendre les ventes.</p>
+              <p className="text-[10px] text-gray-400 mt-2 max-w-[200px] mx-auto leading-relaxed">Veuillez importer de nouveaux tickets.</p>
             </div>
           )}
         </section>
