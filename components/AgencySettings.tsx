@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Building2, Save, CheckCircle, MessageSquare, AlertTriangle, ShieldCheck, Eye, EyeOff, Loader2, Trash2, Globe, Clock, ShieldAlert } from 'lucide-react';
 import { supabase } from '../services/supabase';
@@ -135,7 +134,7 @@ const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang, notify }) =
                 <label className="text-[11px] font-black uppercase text-gray-500 tracking-widest">{t.autoCleanup}</label>
                 <span className="bg-primary-50 dark:bg-primary-900/30 text-primary-600 px-3 py-1 rounded-lg font-black text-xs">{autoCleanupDays} jours</span>
               </div>
-              <input type="range" min="7" max="180" value={autoCleanupDays} onChange={e => setAutoCleanupDays(parseInt(e.target.value))} className="w-full h-2 bg-gray-100 dark:bg-gray-700 rounded-full appearance-none cursor-pointer accent-primary-600 focus:ring-2 focus:ring-primary-500/20" />
+              <input type="range" min="7" max="180" value={autoCleanupDays} onChange={e => setAutoCleanupDays(parseInt(e.target.value))} className="w-full h-2 bg-gray-100 dark:bg-gray-700 rounded-full appearance-none cursor-pointer accent-primary-600 focus:ring-2 focus:ring-primary-500/20 transition-all" />
             </div>
             <div className="bg-amber-50 dark:bg-amber-900/10 p-5 rounded-2xl border border-amber-100 dark:border-amber-800 flex gap-4">
               <Clock className="text-amber-500 shrink-0" size={24} />
@@ -170,7 +169,7 @@ const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang, notify }) =
 
       {showConfirm && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-300">
-          <div className="bg-white dark:bg-gray-800 w-full max-w-sm rounded-[3rem] p-10 shadow-2xl text-center border dark:border-gray-700">
+          <div className="bg-white dark:bg-gray-800 w-full max-sm rounded-[3rem] p-10 shadow-2xl text-center border dark:border-gray-700">
             <div className="w-20 h-20 bg-amber-50 text-amber-500 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-inner"><AlertTriangle size={40} /></div>
             <h3 className="text-2xl font-black uppercase tracking-tight mb-2">Sauvegarder ?</h3>
             <p className="text-sm text-gray-500 dark:text-gray-400 font-medium mb-8 leading-relaxed">Ces paramètres affecteront tous les reçus envoyés à vos clients.</p>
