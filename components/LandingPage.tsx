@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { LayoutDashboard, ShoppingBag, Database, ShieldCheck, ArrowRight, CheckCircle2, Wifi, Globe, Smartphone, Star, Zap, CreditCard, Loader2, Users } from 'lucide-react';
 import { supabase } from '../services/supabase';
@@ -17,7 +18,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLoginClick }) => {
             const data = await supabase.getSubscriptionPlans();
             setPlans(data);
         } catch (e) {
-            console.error("Erreur de chargement des offres.");
+            console.error("Erreur chargement offres.");
         } finally {
             setLoading(false);
         }
@@ -50,14 +51,14 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLoginClick }) => {
         
         <div className="max-w-4xl mx-auto text-center space-y-6 md:space-y-8 animate-in slide-in-from-bottom-8 duration-700">
           <div className="inline-flex items-center gap-2 px-4 py-2 bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 rounded-full text-[10px] md:text-xs font-black uppercase tracking-widest border border-primary-100 dark:border-primary-800">
-            <Wifi size={14} /> La référence pour la gestion WiFi
+            <Wifi size={14} /> SaaS Professionnel WiFi Hotspot
           </div>
           <h1 className="text-4xl sm:text-5xl lg:text-7xl font-black tracking-tight leading-[1.1] text-gray-900 dark:text-white">
-            Optimisez la gestion <br className="hidden md:block" />
+            Optimisez la vente <br className="hidden md:block" />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary-600 to-blue-400">de vos tickets.</span>
           </h1>
           <p className="text-base md:text-lg text-gray-500 dark:text-gray-400 font-medium max-w-2xl mx-auto leading-relaxed px-4">
-            Importation Mikhmon instantanée, terminal de vente mobile et rapports financiers automatiques. Gérez votre parc WiFi avec une infrastructure cloud robuste.
+            Importation Mikhmon instantanée, terminal de vente mobile optimisé et traçabilité comptable totale. La solution cloud robuste pour les gérants de hotspots.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4 w-full max-w-sm mx-auto sm:max-w-none px-4">
             <button 
@@ -83,27 +84,27 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLoginClick }) => {
       <section id="features" className="py-20 md:py-32 bg-gray-50 dark:bg-gray-900/50">
         <div className="max-w-7xl mx-auto px-6">
           <div className="text-center mb-16 space-y-4">
-            <h2 className="text-3xl md:text-4xl font-black tracking-tight dark:text-white uppercase leading-none">Puissance & Performance</h2>
-            <p className="text-gray-500 max-w-xl mx-auto text-sm md:text-base font-medium">Une suite d'outils professionnels pour maximiser vos revenus WiFi.</p>
+            <h2 className="text-3xl md:text-4xl font-black tracking-tight dark:text-white uppercase leading-none">Excellence & Fiabilité</h2>
+            <p className="text-gray-500 max-w-xl mx-auto text-sm md:text-base font-medium">Une infrastructure sécurisée conçue pour le terrain et la mobilité.</p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-10">
             <FeatureCard 
               icon={<Database className="w-6 h-6 text-white" />}
-              title="Inventaire Cloud"
-              desc="Synchronisation temps-réel de votre stock. Importation intelligente des exports Mikhmon en moins de 2 secondes."
+              title="Cloud Mikhmon"
+              desc="Synchronisation immédiate de vos stocks. Importez vos CSV Mikhmon et gérez vos tickets partout."
               color="bg-amber-500"
             />
             <FeatureCard 
               icon={<ShoppingBag className="w-6 h-6 text-white" />}
-              title="Vente Nomade"
-              desc="Interface de vente ultra-légère conçue pour le mobile. Génération de reçus PDF et partage WhatsApp direct."
+              title="Terminal Mobile"
+              desc="Vendez vos tickets depuis n'importe quel smartphone. Interface ultra-rapide et partage WhatsApp."
               color="bg-primary-500"
             />
             <FeatureCard 
               icon={<ShieldCheck className="w-6 h-6 text-white" />}
-              title="Traçabilité Totale"
-              desc="Historique complet des ventes et logs d'audit système. Assurez une transparence comptable irréprochable."
+              title="Audit Complet"
+              desc="Chaque transaction est tracée. Historique de vente illimité pour une gestion saine de votre agence."
               color="bg-green-500"
             />
           </div>
@@ -115,11 +116,11 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLoginClick }) => {
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16 space-y-4">
              <div className="inline-flex items-center gap-2 px-3 py-1 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-full text-[10px] font-black uppercase tracking-widest border border-indigo-100 dark:border-indigo-800 mb-2">
-                <Zap size={12} /> Licences Professionnelles
+                <Zap size={12} /> Forfaits Agences
              </div>
-             <h2 className="text-3xl md:text-5xl font-black tracking-tight dark:text-white leading-tight uppercase">Des tarifs sans surprise</h2>
+             <h2 className="text-3xl md:text-5xl font-black tracking-tight dark:text-white leading-tight uppercase">Licences Sans Engagement</h2>
              <p className="text-gray-500 dark:text-gray-400 max-w-2xl mx-auto font-medium text-sm md:text-base px-2">
-                Aucun abonnement caché. Choisissez votre pack et profitez de l'intégralité des fonctionnalités cloud Gesta Wifi.
+                Activez votre agence en quelques secondes. Toutes les fonctionnalités sont incluses dans chaque pack.
              </p>
           </div>
 
@@ -149,34 +150,34 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLoginClick }) => {
       </section>
 
       {/* TRUST SECTION */}
-      <section className="py-24 px-6 bg-gray-50 dark:bg-gray-900/40 overflow-hidden">
+      <section className="py-24 px-6 bg-gray-50 dark:bg-gray-900/40">
         <div className="max-w-7xl mx-auto flex flex-col lg:flex-row items-center gap-16 lg:gap-20">
           <div className="flex-1 space-y-10 text-center lg:text-left">
             <div className="space-y-4">
               <h2 className="text-3xl md:text-5xl font-black tracking-tight leading-none dark:text-white uppercase">
-                Gérez votre agence <br className="hidden md:block"/> en toute autonomie.
+                Une gestion simplifiée <br className="hidden md:block"/> pour vos collaborateurs.
               </h2>
-              <p className="text-gray-500 dark:text-gray-400 font-medium">Conçu pour les entrepreneurs qui exigent stabilité et sécurité.</p>
+              <p className="text-gray-500 dark:text-gray-400 font-medium">L'outil idéal pour déléguer la vente sans risque d'erreurs comptables.</p>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 text-left">
               <BenefitItem 
-                title="Accès Vendeurs" 
-                desc="Créez des accès restreints pour votre personnel de vente." 
+                title="Staff Management" 
+                desc="Créez des accès vendeurs limités pour votre équipe." 
                 icon={<Users size={20} />}
               />
               <BenefitItem 
-                title="Logs d'audit" 
-                desc="Suivez chaque opération pour prévenir les erreurs et fraudes." 
+                title="Logs de Sécurité" 
+                desc="Surveillance continue des actions effectuées sur le stock." 
                 icon={<ShieldCheck size={20} />}
               />
               <BenefitItem 
-                title="Optimisation Mobile" 
-                desc="L'application est 100% responsive pour un usage fluide sur le terrain." 
-                icon={<Zap size={20} />}
+                title="Accès Mobile" 
+                desc="Optimisé pour Chrome et Safari sur mobile pour une vente directe." 
+                icon={<Smartphone size={20} />}
               />
               <BenefitItem 
-                title="Backup automatique" 
-                desc="Vos données sont sécurisées et sauvegardées quotidiennement." 
+                title="Backup Cloud" 
+                desc="Vos données sont chiffrées et sauvegardées quotidiennement." 
                 icon={<Database size={20} />}
               />
             </div>
@@ -188,9 +189,9 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLoginClick }) => {
                   <div className="w-24 h-24 bg-primary-50 dark:bg-primary-900/30 text-primary-600 rounded-3xl flex items-center justify-center shadow-inner">
                     <Smartphone size={48} />
                   </div>
-                  <div className="text-center">
-                    <h3 className="text-2xl font-black dark:text-white uppercase">Multi-Plateforme</h3>
-                    <p className="text-gray-500 dark:text-gray-400 text-sm font-medium leading-relaxed mt-2">Pilotez votre business depuis <br/> votre PC, tablette ou smartphone.</p>
+                  <div className="text-center px-4">
+                    <h3 className="text-2xl font-black dark:text-white uppercase">100% Mobile</h3>
+                    <p className="text-gray-500 dark:text-gray-400 text-sm font-medium leading-relaxed mt-2">Pilotez votre agence depuis <br/> votre navigateur habituel.</p>
                   </div>
                </div>
             </div>
@@ -202,17 +203,17 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLoginClick }) => {
       <footer className="py-16 bg-white dark:bg-gray-950 border-t border-gray-100 dark:border-gray-800">
         <div className="max-w-7xl mx-auto px-6 text-center space-y-8">
           <div className="flex items-center justify-center gap-3">
-             <div className="w-10 h-10 bg-primary-600 rounded-xl flex items-center justify-center text-white font-black text-xl shadow-md">G</div>
+             <div className="w-10 h-10 bg-primary-600 rounded-xl flex items-center justify-center text-white font-black text-xl">G</div>
              <span className="font-black text-xl uppercase tracking-tighter dark:text-white">Gesta Wifi</span>
           </div>
           <div className="flex flex-wrap justify-center gap-8 text-[11px] font-black uppercase tracking-widest text-gray-400">
             <a href="#" className="hover:text-primary-600 transition-colors">Accueil</a>
             <a href="#" className="hover:text-primary-600 transition-colors">Tarifs</a>
             <a href="#" className="hover:text-primary-600 transition-colors">Aide</a>
-            <a href="#" className="hover:text-primary-600 transition-colors">Mentions légales</a>
+            <a href="#" className="hover:text-primary-600 transition-colors">Contact</a>
           </div>
           <div className="pt-8 border-t border-gray-50 dark:border-gray-900">
-             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">© 2025 GESTA WIFI SAAS - SOLUTION DE GESTION PROFESSIONNELLE</p>
+             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">© 2025 GESTA WIFI SAAS - SYSTÈME PROFESSIONNEL DE GESTION</p>
           </div>
         </div>
       </footer>
@@ -235,7 +236,7 @@ const PricingCard = ({ title, price, currency, duration, features, onAction, isP
   <div className={`p-10 rounded-[3rem] flex flex-col justify-between border-2 transition-all duration-500 hover:translate-y-[-10px] relative ${isPopular ? 'bg-primary-600 text-white border-primary-500 shadow-2xl shadow-primary-600/30' : 'bg-white dark:bg-gray-800 border-gray-100 dark:border-gray-700 hover:border-primary-200 dark:hover:border-primary-800'}`}>
     {isPopular && (
         <div className="absolute top-0 right-1/2 translate-x-1/2 -translate-y-1/2 px-5 py-2 bg-indigo-500 text-white rounded-full text-[10px] font-black uppercase tracking-widest shadow-2xl border-4 border-white dark:border-gray-800">
-            Recommandé
+            Choix Pro
         </div>
     )}
     
@@ -252,12 +253,12 @@ const PricingCard = ({ title, price, currency, duration, features, onAction, isP
                 <span className="text-4xl md:text-5xl font-black tracking-tighter">{price}</span>
                 <span className="text-sm font-bold opacity-70 uppercase tracking-widest">{currency}</span>
             </div>
-            <p className={`text-[11px] font-black uppercase tracking-widest mt-2 opacity-60`}>Validité: {duration}</p>
+            <p className={`text-[11px] font-black uppercase tracking-widest mt-2 opacity-60`}>Licence: {duration}</p>
         </div>
         
         <ul className="space-y-5 mb-12">
             {features.map((f: string, i: number) => (
-                <li key={i} className="flex items-start gap-3 text-sm font-medium leading-tight">
+                <li key={i} className="flex items-start gap-3 text-sm font-medium leading-tight text-left">
                     <div className={`mt-0.5 shrink-0 ${isPopular ? 'text-white' : 'text-primary-500'}`}><CheckCircle2 size={18} /></div>
                     <span className={isPopular ? 'opacity-90' : 'text-gray-500 dark:text-gray-400'}>{f}</span>
                 </li>
@@ -269,7 +270,7 @@ const PricingCard = ({ title, price, currency, duration, features, onAction, isP
         onClick={onAction}
         className={`w-full py-5 rounded-2xl font-black text-xs uppercase tracking-widest transition-all active:scale-95 shadow-xl ${isPopular ? 'bg-white text-primary-600 hover:bg-gray-50' : 'bg-primary-600 text-white hover:bg-primary-700 shadow-primary-500/20'}`}
     >
-        Choisir ce pack
+        Activer pack
     </button>
   </div>
 );
@@ -279,7 +280,7 @@ const BenefitItem = ({ title, desc, icon }: any) => (
     <div className="w-12 h-12 rounded-2xl bg-white dark:bg-gray-800 border dark:border-gray-700 text-primary-600 flex items-center justify-center shrink-0 shadow-sm">
       {icon}
     </div>
-    <div>
+    <div className="min-w-0">
       <h4 className="text-lg font-black dark:text-white mb-1 uppercase leading-none">{title}</h4>
       <p className="text-gray-500 dark:text-gray-400 text-sm leading-relaxed font-medium">{desc}</p>
     </div>
