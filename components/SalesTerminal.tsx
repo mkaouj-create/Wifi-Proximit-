@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { ShoppingCart, Phone, CheckCircle2, Share2, Loader2, Copy, Info, Sparkles, RefreshCcw } from 'lucide-react';
+import { ShoppingCart, Phone, CheckCircle2, Share2, Loader2, Copy, Info, Sparkles, RefreshCcw, ShieldAlert } from 'lucide-react';
 import { supabase } from '../services/supabase';
-import { Ticket, UserProfile, TicketStatus, Agency } from '../types';
+import { Ticket, UserProfile, TicketStatus, Agency, UserRole } from '../types';
 import { translations, Language } from '../i18n';
 
 interface SalesTerminalProps {
@@ -23,6 +23,25 @@ const SalesTerminal: React.FC<SalesTerminalProps> = ({ user, lang, notify, agenc
   const [showConfirmSale, setShowConfirmSale] = useState(false);
 
   const t = translations[lang];
+
+  // PROTECTION SUPER ADMIN : Rôle de supervision uniquement
+  if (user.role === UserRole.SUPER_ADMIN) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[50vh] animate-in zoom-in duration-500 p-6 text-center">
+        <div className="w-24 h-24 bg-purple-100 dark:bg-purple-900/20 text-purple-600 rounded-[2.5rem] flex items-center justify-center mb-6 shadow-xl shadow-purple-500/10">
+          <ShieldAlert size={48} />
+        </div>
+        <h2 className="text-3xl font-black uppercase text-purple-600 tracking-tighter mb-2">Accès Console</h2>
+        <p className="text-gray-500 dark:text-gray-400 font-medium max-w-sm leading-relaxed mb-8">
+          Le mode <b>Super-Admin</b> est réservé à la gestion des agences et à la supervision globale.
+        </p>
+        <div className="p-6 bg-white dark:bg-gray-800 rounded-3xl border border-gray-100 dark:border-gray-700 shadow-sm max-w-sm">
+           <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest mb-2">Note de sécurité</p>
+           <p className="text-xs font-bold text-gray-600 dark:text-gray-300">Pour effectuer des ventes, veuillez utiliser un compte <b>Administrateur</b> ou <b>Vendeur</b> associé à une agence spécifique.</p>
+        </div>
+      </div>
+    );
+  }
 
   // Chargement des données
   const loadData = useCallback(async (silent = false) => {

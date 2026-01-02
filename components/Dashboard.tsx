@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState, useCallback } from 'react';
 import { TrendingUp, ShoppingBag, Database, Users, Building2, RefreshCcw, Coins } from 'lucide-react';
 import { supabase } from '../services/supabase';
@@ -9,6 +8,8 @@ const Dashboard: React.FC<{ user: UserProfile, lang: Language, onNavigate: (t: s
   const [stats, setStats] = useState({ revenue: 0, soldCount: 0, stockCount: 0, agencyCount: 0, userCount: 0, currency: 'XOF', credits: 0 });
   const [isSyncing, setIsSyncing] = useState(false);
   const t = translations[lang];
+
+  const isSuper = user.role === UserRole.SUPER_ADMIN;
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setIsSyncing(true);
@@ -46,7 +47,7 @@ const Dashboard: React.FC<{ user: UserProfile, lang: Language, onNavigate: (t: s
       <div className="bg-white dark:bg-gray-800 p-6 rounded-[2.5rem] shadow-sm border dark:border-gray-700">
         <h3 className="text-lg font-black dark:text-white uppercase mb-6">{t.quickShortcuts}</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Shortcut onClick={() => onNavigate('sales')} title={t.quickSale} icon={<ShoppingBag/>} color="bg-blue-50 text-blue-600" />
+          {!isSuper && <Shortcut onClick={() => onNavigate('sales')} title={t.quickSale} icon={<ShoppingBag/>} color="bg-blue-50 text-blue-600" />}
           <Shortcut onClick={() => onNavigate('tickets')} title={t.importCsv} icon={<Database/>} color="bg-amber-50 text-amber-600" />
           <Shortcut onClick={() => onNavigate('history')} title={t.history} icon={<TrendingUp/>} color="bg-green-50 text-green-600" />
         </div>

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   LayoutDashboard, ShoppingBag, Database, Users, Lock, Sun, Moon, 
@@ -161,7 +160,12 @@ const App: React.FC = () => {
 
   const canAccess = useCallback((tab: string) => {
     if (!user) return false;
-    if (user.role === UserRole.SUPER_ADMIN) return true;
+    
+    // Restriction Super Admin : Pas d'accès au Terminal de Vente
+    if (user.role === UserRole.SUPER_ADMIN) {
+        if (tab === 'sales') return false;
+        return true;
+    }
     
     // Par défaut, accès limité si pas d'agence chargée (devrait être rare dans 'MAIN')
     if (!currentAgency?.settings?.modules) return false;
