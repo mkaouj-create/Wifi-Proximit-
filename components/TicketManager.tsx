@@ -28,9 +28,9 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
 
   const t = translations[lang];
   
-  // LOGIQUE DE RÔLES STRICTE
+  // LOGIQUE DE RÔLES : Restriction stricte aux ADMINS pour les modifications
   const isSuper = user.role === UserRole.SUPER_ADMIN;
-  const isOnlyAdmin = user.role === UserRole.ADMIN; // Uniquement ADMIN peut gérer le stock
+  const isOnlyAdmin = user.role === UserRole.ADMIN; // Seul le rôle ADMIN (et non Super Admin) peut modifier le stock
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -95,8 +95,8 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
           };
         }).filter((r): r is any => r !== null && r.username.length > 0);
 
-        const targetAid = isSuper ? importTargetAgencyId : user.agency_id;
-        const res = await supabase.importTickets(rows, user.id, targetAid);
+        // Seul ADMIN peut importer, donc targetAid est toujours son agence
+        const res = await supabase.importTickets(rows, user.id, user.agency_id);
         
         notify('success', `${res.success} tickets ajoutés.`);
         setShowImport(false);
@@ -118,8 +118,7 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
     if (isNaN(price) || price < 0 || !priceTargetProfile) return;
     setIsUpdatingPrice(true);
     try {
-      const targetAid = isSuper ? (selectedAgency === 'ALL' ? user.agency_id : selectedAgency) : user.agency_id;
-      await supabase.updateTicketsPriceByProfile(targetAid, priceTargetProfile, price, user);
+      await supabase.updateTicketsPriceByProfile(user.agency_id, priceTargetProfile, price, user);
       notify('success', "Tarifs mis à jour.");
       setShowPriceModal(false);
       loadData();
@@ -143,8 +142,7 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
     if (!purgeTargetProfile || !isOnlyAdmin) return;
     setIsDeleting(true);
     try {
-      const targetAid = isSuper ? (selectedAgency === 'ALL' ? user.agency_id : selectedAgency) : user.agency_id;
-      await supabase.deleteTicketsByProfile(targetAid, purgeTargetProfile, user);
+      await supabase.deleteTicketsByProfile(user.agency_id, purgeTargetProfile, user);
       notify('success', `Profil "${purgeTargetProfile}" purgé.`);
       setShowPurgeModal(false);
       loadData();
@@ -176,7 +174,7 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
           </p>
         </div>
         <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-          {/* SEULS LES ADMINS VOIENT LES BOUTONS D'ACTION */}
+          {/* ACTIONS UNIQUEMENT POUR ADMIN */}
           {isOnlyAdmin && (
             <>
               <button 
@@ -326,10 +324,10 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
         </div>
       </div>
 
-      {/* Confirmation Single Delete (Uniquement pour ADMIN) */}
+      {/* Confirmation Suppression Individuelle (Uniquement ADMIN) */}
       {showSingleDeleteModal && isOnlyAdmin && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in">
-          <div className="bg-white dark:bg-gray-800 w-full max-sm rounded-[2.5rem] p-10 shadow-2xl text-center border dark:border-gray-700">
+          <div className="bg-white dark:bg-gray-800 w-full max-w-sm rounded-[2.5rem] p-10 shadow-2xl text-center border dark:border-gray-700">
             <div className="w-20 h-20 bg-red-50 text-red-500 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-inner"><AlertCircle size={40} /></div>
             <h3 className="text-xl font-black uppercase mb-2 text-gray-900 dark:text-white">Supprimer Ticket ?</h3>
             <p className="text-sm text-gray-500 dark:text-gray-400 font-medium mb-8 leading-relaxed">Voulez-vous supprimer le ticket <b>{showSingleDeleteModal.username}</b> de l'inventaire ?</p>
@@ -343,7 +341,7 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
         </div>
       )}
 
-      {/* Modal Purge Profile (Uniquement pour ADMIN) */}
+      {/* Modal Purge Profil (Uniquement ADMIN) */}
       {showPurgeModal && isOnlyAdmin && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in">
           <div className="bg-white dark:bg-gray-800 w-full max-w-sm rounded-[2.5rem] p-10 shadow-2xl text-center border dark:border-gray-700">
@@ -369,7 +367,7 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
         </div>
       )}
 
-      {/* Price Modal (Uniquement pour ADMIN) */}
+      {/* Modal Prix Profil (Uniquement ADMIN) */}
       {showPriceModal && isOnlyAdmin && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in">
           <div className="bg-white dark:bg-gray-800 w-full max-w-sm rounded-[3rem] p-10 shadow-2xl border dark:border-gray-700">
@@ -405,7 +403,7 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
         </div>
       )}
 
-      {/* Import Modal (Uniquement pour ADMIN) */}
+      {/* Modal Import CSV (Uniquement ADMIN) */}
       {showImport && isOnlyAdmin && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in">
           <div className="bg-white dark:bg-gray-800 w-full max-w-sm rounded-[3rem] p-10 shadow-2xl border dark:border-gray-700">
@@ -413,14 +411,9 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
               <h3 className="text-2xl font-black uppercase tracking-tight dark:text-white">Import CSV</h3>
               <button onClick={() => setShowImport(false)} className="p-2 bg-gray-100 dark:bg-gray-700 rounded-full active:scale-90"><X size={20} /></button>
             </div>
-            {isSuper && (
-              <div className="mb-6 space-y-2 text-left">
-                <label className="text-[9px] font-black text-gray-400 uppercase ml-3">Agence Cible</label>
-                <select className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl font-black text-xs uppercase" value={importTargetAgencyId} onChange={e => setImportTargetAgencyId(e.target.value)}>
-                  {agencies.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                </select>
-              </div>
-            )}
+            {/* Super Admin n'est pas autorisé ici, donc on simplifie l'UI pour l'Admin */}
+            <p className="text-[10px] text-gray-400 font-bold uppercase mb-6 tracking-widest text-center">Destination : Votre Agence</p>
+            
             <label className={`w-full flex flex-col items-center justify-center p-12 border-4 border-dashed rounded-[2.5rem] transition-all cursor-pointer ${isImporting ? 'border-primary-500 bg-primary-50/20' : 'border-gray-100 dark:border-gray-700 hover:border-primary-400'}`}>
               {isImporting ? <Loader2 size={40} className="animate-spin text-primary-600"/> : <FileUp size={40} className="text-primary-600" />}
               <p className="font-black text-[11px] text-gray-600 dark:text-gray-300 uppercase mt-4">Choisir CSV</p>
