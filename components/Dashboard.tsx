@@ -48,7 +48,7 @@ const Dashboard: React.FC<{ user: UserProfile, lang: Language, onNavigate: (t: s
         <h3 className="text-lg font-black dark:text-white uppercase mb-6">{t.quickShortcuts}</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {!isSuper && <Shortcut onClick={() => onNavigate('sales')} title={t.quickSale} icon={<ShoppingBag/>} color="bg-blue-50 text-blue-600" />}
-          <Shortcut onClick={() => onNavigate('tickets')} title={t.importCsv} icon={<Database/>} color="bg-amber-50 text-amber-600" />
+          <Shortcut onClick={() => onNavigate('tickets')} title={isSuper ? t.inventory : t.importCsv} icon={<Database/>} color="bg-amber-50 text-amber-600" />
           <Shortcut onClick={() => onNavigate('history')} title={t.history} icon={<TrendingUp/>} color="bg-green-50 text-green-600" />
         </div>
       </div>

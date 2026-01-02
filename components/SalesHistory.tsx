@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { Search, User, Download, Trash2, AlertTriangle, X, Tag, Wifi, Banknote, Clock, Phone, Share2, Copy, Check, Calendar } from 'lucide-react';
 import { supabase } from '../services/supabase';
@@ -96,6 +95,9 @@ const SalesHistory: React.FC<SalesHistoryProps> = ({ user, lang }) => {
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
+  // Seul l'Admin de l'agence peut annuler une vente (car cela impacte le stock et la caisse de l'agence)
+  const canCancel = user.role === UserRole.ADMIN;
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -176,12 +178,15 @@ const SalesHistory: React.FC<SalesHistoryProps> = ({ user, lang }) => {
                     </span>
                   </td>
                   <td className="px-6 py-4 text-center">
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); setSaleToCancel(sale); }}
-                      className="p-2.5 bg-red-50 dark:bg-red-900/10 text-red-500 rounded-xl hover:bg-red-100 transition-all opacity-0 group-hover:opacity-100"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {canCancel && (
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); setSaleToCancel(sale); }}
+                        className="p-2.5 bg-red-50 dark:bg-red-900/10 text-red-500 rounded-xl hover:bg-red-100 transition-all opacity-0 group-hover:opacity-100"
+                        title="Annuler vente"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -253,7 +258,7 @@ const SalesHistory: React.FC<SalesHistoryProps> = ({ user, lang }) => {
                    <button onClick={handleCopy} className="flex-1 py-4 bg-gray-100 dark:bg-gray-700/50 text-gray-900 dark:text-white rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 active:scale-95 transition-all">{copied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />} {t.copyCode}</button>
                    <button onClick={sendWhatsApp} className="flex-1 py-4 bg-green-500 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-green-500/20 active:scale-95 transition-all"><Share2 className="w-4 h-4" /> {t.whatsapp}</button>
                  </div>
-                 {user.role !== UserRole.SELLER && (
+                 {canCancel && (
                    <button onClick={() => { setSaleToCancel(selectedSale); setSelectedSale(null); }} className="w-full py-3 text-[10px] font-black uppercase text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 rounded-xl transition-all">Annuler la transaction</button>
                  )}
                </div>
