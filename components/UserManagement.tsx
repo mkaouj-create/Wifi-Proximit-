@@ -173,7 +173,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
 
       {passwordModalUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-300">
-          <div className="bg-white dark:bg-gray-800 w-full max-w-sm rounded-[2.5rem] p-10 shadow-2xl text-center border dark:border-gray-700">
+          <div className="bg-white dark:bg-gray-800 w-full max-sm rounded-[2.5rem] p-10 shadow-2xl text-center border dark:border-gray-700">
             <div className="w-16 h-16 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center mx-auto mb-6"><Key size={32} /></div>
             <h3 className="text-xl font-black uppercase mb-4">Nouveau mot de passe</h3>
             <div className="space-y-4 mb-8">
