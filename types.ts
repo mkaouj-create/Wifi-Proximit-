@@ -89,8 +89,12 @@ export interface CreditTransaction {
 
 export interface AgencySettings {
   whatsapp_receipt_header?: string;
+  whatsapp_receipt_footer?: string;
   currency?: string;
   contact_phone?: string;
+  support_email?: string;
+  business_address?: string;
+  auto_cleanup_days?: number;
   modules?: AgencyModules;
   archived_revenue?: number;
   archived_sales_count?: number;

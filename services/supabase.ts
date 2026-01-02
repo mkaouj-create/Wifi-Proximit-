@@ -298,6 +298,12 @@ class SupabaseService {
     if (error) throw error;
   }
   
+  async deleteUser(id: string, actor: UserProfile) {
+    const { error } = await client.from('profiles').delete().eq('id', id);
+    if (error) throw error;
+    await this.log(actor, 'USER_DELETE', `Suppression utilisateur ID: ${id}`);
+  }
+
   async updateUserRole(id: string, role: UserRole) { 
     await client.from('profiles').update({ role }).eq('id', id); 
   }
