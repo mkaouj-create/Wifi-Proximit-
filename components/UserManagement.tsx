@@ -121,7 +121,9 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
             <div className={`w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-lg ${confirmAction.type === 'DELETE' ? 'bg-red-50 text-red-500' : 'bg-amber-50 text-amber-500'}`}>
               <AlertTriangle size={40} />
             </div>
-            <h3 className="text-xl font-black uppercase tracking-tight mb-2 text-gray-900 dark:text-white">{confirmAction.type === 'DELETE' ? 'Confirmer Suppression' : t.confirm}</h3>
+            <h3 className="text-xl font-black uppercase tracking-tight mb-2 text-gray-900 dark:text-white">
+              {confirmAction.type === 'DELETE' ? 'Confirmer Suppression' : t.confirm}
+            </h3>
             <p className="text-sm text-gray-500 dark:text-gray-400 font-medium leading-relaxed mb-8">
               {confirmAction.type === 'DELETE' ? 'Voulez-vous vraiment supprimer définitivement ce collaborateur de votre équipe ?' : 'Souhaitez-vous valider cette action ?'}
             </p>
@@ -144,19 +146,19 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
               <button onClick={() => setShowAdd(false)} className="p-2 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-all active:scale-90"><X /></button>
             </div>
             <div className="space-y-4">
-              <div className="space-y-1">
+              <div className="space-y-1 text-left">
                 <label className="text-[10px] font-black uppercase text-gray-400 ml-2">Email</label>
                 <input type="email" placeholder="email@domaine.com" className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl outline-none font-bold dark:text-white focus:ring-2 focus:ring-primary-500/20 transition-all" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
               </div>
-              <div className="space-y-1">
+              <div className="space-y-1 text-left">
                 <label className="text-[10px] font-black uppercase text-gray-400 ml-2">Mot de passe</label>
                 <input type="password" placeholder="Min. 6 caractères" className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl outline-none font-bold dark:text-white focus:ring-2 focus:ring-primary-500/20 transition-all" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} />
               </div>
-              <div className="space-y-1">
+              <div className="space-y-1 text-left">
                 <label className="text-[10px] font-black uppercase text-gray-400 ml-2">Code PIN (4 chiffres)</label>
                 <input type="text" placeholder="0000" maxLength={4} className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl outline-none font-bold dark:text-white focus:ring-2 focus:ring-primary-500/20 transition-all" value={formData.pin} onChange={e => setFormData({...formData, pin: e.target.value.replace(/\D/g, '')})} />
               </div>
-              <div className="space-y-1">
+              <div className="space-y-1 text-left">
                 <label className="text-[10px] font-black uppercase text-gray-400 ml-2">Rôle / Permissions</label>
                 <select className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl outline-none font-bold dark:text-white appearance-none cursor-pointer focus:ring-2 focus:ring-primary-500/20 transition-all" value={formData.role} onChange={e => setFormData({...formData, role: e.target.value as UserRole})}>
                   <option value={UserRole.SELLER}>{t.seller}</option>
