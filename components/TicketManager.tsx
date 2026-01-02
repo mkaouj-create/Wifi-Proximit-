@@ -28,9 +28,9 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
 
   const t = translations[lang];
   
-  // LOGIQUE DE RÔLES STRICTE : Seul ADMIN (pas Super Admin) peut modifier le stock
+  // LOGIQUE DE RÔLES STRICTE
   const isSuper = user.role === UserRole.SUPER_ADMIN;
-  const isOnlyAdmin = user.role === UserRole.ADMIN; 
+  const isOnlyAdmin = user.role === UserRole.ADMIN; // Uniquement ADMIN peut gérer le stock
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -176,6 +176,7 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
           </p>
         </div>
         <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+          {/* SEULS LES ADMINS VOIENT LES BOUTONS D'ACTION */}
           {isOnlyAdmin && (
             <>
               <button 
@@ -328,7 +329,7 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
       {/* Confirmation Single Delete (Uniquement pour ADMIN) */}
       {showSingleDeleteModal && isOnlyAdmin && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in">
-          <div className="bg-white dark:bg-gray-800 w-full max-w-sm rounded-[2.5rem] p-10 shadow-2xl text-center border dark:border-gray-700">
+          <div className="bg-white dark:bg-gray-800 w-full max-sm rounded-[2.5rem] p-10 shadow-2xl text-center border dark:border-gray-700">
             <div className="w-20 h-20 bg-red-50 text-red-500 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-inner"><AlertCircle size={40} /></div>
             <h3 className="text-xl font-black uppercase mb-2 text-gray-900 dark:text-white">Supprimer Ticket ?</h3>
             <p className="text-sm text-gray-500 dark:text-gray-400 font-medium mb-8 leading-relaxed">Voulez-vous supprimer le ticket <b>{showSingleDeleteModal.username}</b> de l'inventaire ?</p>
