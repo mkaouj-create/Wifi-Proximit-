@@ -178,7 +178,7 @@ const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang, notify }) =
                 {isSaving && <Loader2 className="animate-spin w-4 h-4" />}
                 {t.confirm}
               </button>
-              <button onClick={() => setShowConfirm(false)} className="w-full py-4 text-xs font-black uppercase text-gray-400 active:scale-95">Annuler</button>
+              <button onClick={() => setShowConfirm(false)} className="w-full py-4 text-xs font-black uppercase text-gray-400 active:scale-95 transition-all">Annuler</button>
             </div>
           </div>
         </div>

@@ -106,8 +106,8 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
               </span>
               {canManage(u) && (
                 <div className="flex gap-1">
-                  <button onClick={() => setPasswordModalUser(u)} className="p-2.5 text-gray-400 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded-xl transition-all"><Key size={16} /></button>
-                  <button onClick={() => setConfirmAction({type: 'DELETE', payload: u})} className="p-2.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-all"><Trash2 size={16} /></button>
+                  <button onClick={() => setPasswordModalUser(u)} className="p-2.5 text-gray-400 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded-xl transition-all active:scale-90"><Key size={16} /></button>
+                  <button onClick={() => setConfirmAction({type: 'DELETE', payload: u})} className="p-2.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-all active:scale-90"><Trash2 size={16} /></button>
                 </div>
               )}
             </div>
@@ -130,7 +130,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
                 {actionLoading && <Loader2 className="animate-spin w-4 h-4" />}
                 {t.confirm}
               </button>
-              <button onClick={() => setConfirmAction(null)} disabled={actionLoading} className="w-full py-4 font-black uppercase text-xs text-gray-400 active:scale-95">Annuler</button>
+              <button onClick={() => setConfirmAction(null)} disabled={actionLoading} className="w-full py-4 font-black uppercase text-xs text-gray-400 active:scale-95 transition-all">Annuler</button>
             </div>
           </div>
         </div>
@@ -141,7 +141,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
           <div className="bg-white dark:bg-gray-800 w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl border dark:border-gray-700">
             <div className="flex justify-between items-center mb-8">
               <h3 className="text-xl font-black uppercase tracking-tight dark:text-white">{t.addMember}</h3>
-              <button onClick={() => setShowAdd(false)} className="p-2 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-all"><X /></button>
+              <button onClick={() => setShowAdd(false)} className="p-2 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-all active:scale-90"><X /></button>
             </div>
             <div className="space-y-4">
               <div className="space-y-1">
@@ -180,8 +180,8 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
               <input type="text" placeholder="Entrez le nouveau MDP" className="w-full p-5 bg-gray-50 dark:bg-gray-900 rounded-2xl outline-none font-black text-center text-lg dark:text-white focus:ring-2 focus:ring-amber-500/20 transition-all" value={resetPwdValue} onChange={e => setResetPwdValue(e.target.value)} />
             </div>
             <div className="flex flex-col gap-3">
-              <button onClick={() => setConfirmAction({type: 'PWD'})} className="w-full py-5 bg-amber-600 text-white rounded-2xl font-black text-sm uppercase shadow-xl shadow-amber-500/20 active:scale-95">Valider</button>
-              <button onClick={() => setPasswordModalUser(null)} className="w-full py-4 font-black uppercase text-xs text-gray-400 active:scale-95">Annuler</button>
+              <button onClick={() => setConfirmAction({type: 'PWD'})} className="w-full py-5 bg-amber-600 text-white rounded-2xl font-black text-sm uppercase shadow-xl shadow-amber-500/20 active:scale-95 transition-all">Valider</button>
+              <button onClick={() => setPasswordModalUser(null)} className="w-full py-4 font-black uppercase text-xs text-gray-400 active:scale-95 transition-all">Annuler</button>
             </div>
           </div>
         </div>
