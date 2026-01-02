@@ -159,7 +159,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
               </div>
               <div className="space-y-1">
                 <label className="text-[10px] font-black uppercase text-gray-400 ml-2">Rôle / Permissions</label>
-                <select className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl outline-none font-bold dark:text-white appearance-none cursor-pointer" value={formData.role} onChange={e => setFormData({...formData, role: e.target.value as UserRole})}>
+                <select className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl outline-none font-bold dark:text-white appearance-none cursor-pointer focus:ring-2 focus:ring-primary-500/20 transition-all" value={formData.role} onChange={e => setFormData({...formData, role: e.target.value as UserRole})}>
                   <option value={UserRole.SELLER}>{t.seller}</option>
                   <option value={UserRole.ADMIN}>{t.admin}</option>
                 </select>
@@ -178,7 +178,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
             <div className="w-16 h-16 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center mx-auto mb-6"><Key size={32} /></div>
             <h3 className="text-xl font-black uppercase mb-4">Nouveau mot de passe</h3>
             <div className="space-y-4 mb-8">
-              <input type="text" placeholder="Entrez le nouveau MDP" className="w-full p-5 bg-gray-50 dark:bg-gray-900 rounded-2xl outline-none font-black text-center text-lg dark:text-white" value={resetPwdValue} onChange={e => setResetPwdValue(e.target.value)} />
+              <input type="text" placeholder="Entrez le nouveau MDP" className="w-full p-5 bg-gray-50 dark:bg-gray-900 rounded-2xl outline-none font-black text-center text-lg dark:text-white focus:ring-2 focus:ring-amber-500/20 transition-all" value={resetPwdValue} onChange={e => setResetPwdValue(e.target.value)} />
             </div>
             <div className="flex flex-col gap-3">
               <button onClick={() => setConfirmAction({type: 'PWD'})} className="w-full py-5 bg-amber-600 text-white rounded-2xl font-black text-sm uppercase shadow-xl shadow-amber-500/20 active:scale-95">Valider</button>

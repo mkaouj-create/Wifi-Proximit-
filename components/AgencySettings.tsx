@@ -135,7 +135,7 @@ const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang, notify }) =
                 <label className="text-[11px] font-black uppercase text-gray-500 tracking-widest">{t.autoCleanup}</label>
                 <span className="bg-primary-50 dark:bg-primary-900/30 text-primary-600 px-3 py-1 rounded-lg font-black text-xs">{autoCleanupDays} jours</span>
               </div>
-              <input type="range" min="7" max="180" value={autoCleanupDays} onChange={e => setAutoCleanupDays(parseInt(e.target.value))} className="w-full h-2 bg-gray-100 dark:bg-gray-700 rounded-full appearance-none cursor-pointer accent-primary-600" />
+              <input type="range" min="7" max="180" value={autoCleanupDays} onChange={e => setAutoCleanupDays(parseInt(e.target.value))} className="w-full h-2 bg-gray-100 dark:bg-gray-700 rounded-full appearance-none cursor-pointer accent-primary-600 focus:ring-2 focus:ring-primary-500/20" />
             </div>
             <div className="bg-amber-50 dark:bg-amber-900/10 p-5 rounded-2xl border border-amber-100 dark:border-amber-800 flex gap-4">
               <Clock className="text-amber-500 shrink-0" size={24} />
@@ -155,7 +155,7 @@ const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang, notify }) =
                 </button>
               </div>
             </div>
-            <button disabled={pwdLoading || !newPassword} className="w-full md:w-auto h-[62px] px-10 bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-xl disabled:opacity-50 transition-all">
+            <button disabled={pwdLoading || !newPassword} className="w-full md:w-auto h-[62px] px-10 bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-xl disabled:opacity-50 transition-all active:scale-95">
               {pwdLoading ? <Loader2 size={18} className="animate-spin" /> : 'Mettre à jour'}
             </button>
           </form>
@@ -175,7 +175,7 @@ const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang, notify }) =
             <h3 className="text-2xl font-black uppercase tracking-tight mb-2">Sauvegarder ?</h3>
             <p className="text-sm text-gray-500 dark:text-gray-400 font-medium mb-8 leading-relaxed">Ces paramètres affecteront tous les reçus envoyés à vos clients.</p>
             <div className="flex flex-col gap-3">
-              <button onClick={handleSave} disabled={isSaving} className="w-full py-5 bg-primary-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl flex items-center justify-center gap-2">
+              <button onClick={handleSave} disabled={isSaving} className="w-full py-5 bg-primary-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl flex items-center justify-center gap-2 transition-all active:scale-95">
                 {isSaving && <Loader2 className="animate-spin w-4 h-4" />}
                 {t.confirm}
               </button>
