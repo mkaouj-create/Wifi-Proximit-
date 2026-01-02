@@ -196,6 +196,25 @@ class SupabaseService {
     await this.log(actor, 'TICKET_UPDATE', `Mise à jour tarif profil "${profile}" : ${newPrice} XOF`);
   }
 
+  async deleteTicket(tid: string, actor: UserProfile) {
+    const { error } = await client.from('tickets')
+      .delete()
+      .eq('id', tid)
+      .eq('status', TicketStatus.UNSOLD);
+    if (error) throw error;
+    await this.log(actor, 'TICKET_DELETE', `Suppression ticket ID: ${tid}`);
+  }
+
+  async deleteTicketsByProfile(aid: string, profile: string, actor: UserProfile) {
+    const { error } = await client.from('tickets')
+      .delete()
+      .eq('agency_id', aid)
+      .eq('profile', profile)
+      .eq('status', TicketStatus.UNSOLD);
+    if (error) throw error;
+    await this.log(actor, 'TICKET_DELETE_BULK', `Suppression par profil "${profile}" pour agence ID: ${aid}`);
+  }
+
   async getStats(aid: string, role: UserRole) {
     if (!this.isConfigured()) return { revenue: 0, soldCount: 0, stockCount: 0, userCount: 0, agencyCount: 0, currency: 'XOF', credits: 0 };
     const matchQuery = role === UserRole.SUPER_ADMIN ? {} : { agency_id: aid };
