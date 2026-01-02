@@ -31,7 +31,6 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
       
       if (isSuper && agenciesData) {
         setAgencies(agenciesData);
-        // Par défaut on cible la première agence active ou celle de l'admin
         const defaultTarget = agenciesData.find((a: Agency) => a.id === user.agency_id) || agenciesData[0];
         if (defaultTarget) setImportTargetAgencyId(defaultTarget.id);
       }
@@ -58,7 +57,6 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
         const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
         if (lines.length === 0) throw new Error("Format de fichier non reconnu ou vide.");
 
-        // Détection intelligente du délimiteur
         const firstLine = lines[0];
         const delimiter = firstLine.includes(';') ? ';' : firstLine.includes(',') ? ',' : '\t';
         
@@ -71,7 +69,6 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
           price: headers.findIndex(h => h.includes('price') || h === 'prix' || h === 'tarif')
         };
 
-        // Si on ne trouve pas l'en-tête "user", on suppose qu'il n'y a pas d'en-tête et on utilise les colonnes par défaut
         const hasHeader = idx.user !== -1;
         const dataLines = hasHeader ? lines.slice(1) : lines;
         
@@ -97,7 +94,6 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
         notify('error', err.message || "Erreur critique lors de l'importation.");
       } finally {
         setIsImporting(false);
-        // Reset input file
         e.target.value = '';
       }
     };
@@ -283,10 +279,6 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
                 </label>
               </div>
             </div>
-            
-            <p className="mt-8 text-center text-[9px] text-gray-400 font-medium px-4">
-              Assurez-vous que votre CSV contient au moins une colonne <span className="font-black text-gray-600 dark:text-gray-200">User</span> ou <span className="font-black text-gray-600 dark:text-gray-200">Username</span>.
-            </p>
           </div>
         </div>
       )}
