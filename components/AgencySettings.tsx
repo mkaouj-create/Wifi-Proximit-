@@ -67,8 +67,11 @@ const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang, notify }) =
       setShowConfirm(false);
       setTimeout(() => setSaved(false), 2000);
       loadAgency();
-    } catch (e) { alert("Erreur de sauvegarde"); }
-    finally { setIsSaving(false); }
+    } catch (e) { 
+        alert("Erreur de sauvegarde"); 
+    } finally { 
+        setIsSaving(false); 
+    }
   };
 
   const handleChangePwd = async (e: React.FormEvent) => {
@@ -85,11 +88,11 @@ const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang, notify }) =
 
   if (user.role === UserRole.SELLER) return (
     <div className="p-20 flex flex-col items-center justify-center text-center animate-in zoom-in duration-500">
-      <div className="w-20 h-20 bg-red-100 text-red-600 rounded-[2rem] flex items-center justify-center mb-6 shadow-xl shadow-red-500/10">
+      <div className="w-20 h-20 bg-red-100 dark:bg-red-900/20 text-red-600 rounded-[2rem] flex items-center justify-center mb-6 shadow-xl shadow-red-500/10">
         <ShieldAlert size={40} />
       </div>
       <h2 className="text-2xl font-black uppercase text-red-500 tracking-tighter">Accès Restreint</h2>
-      <p className="text-gray-500 font-medium mt-2 max-w-xs">Seuls les administrateurs peuvent modifier les paramètres de l'agence.</p>
+      <p className="text-gray-500 dark:text-gray-400 font-medium mt-2 max-w-xs">Seuls les administrateurs peuvent modifier les paramètres de l'agence.</p>
     </div>
   );
 
@@ -131,12 +134,19 @@ const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang, notify }) =
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-center">
             <div className="md:col-span-2 space-y-4">
               <div className="flex justify-between items-center px-2">
-                <label className="text-[11px] font-black uppercase text-gray-500 tracking-widest">{t.autoCleanup}</label>
+                <label className="text-[11px] font-black uppercase text-gray-500 tracking-widest leading-none">{t.autoCleanup}</label>
                 <span className="bg-primary-50 dark:bg-primary-900/30 text-primary-600 px-3 py-1 rounded-lg font-black text-xs">{autoCleanupDays} jours</span>
               </div>
-              <input type="range" min="7" max="180" value={autoCleanupDays} onChange={e => setAutoCleanupDays(parseInt(e.target.value))} className="w-full h-2 bg-gray-100 dark:bg-gray-700 rounded-full appearance-none cursor-pointer accent-primary-600 focus:ring-2 focus:ring-primary-500/20 transition-all" />
+              <input 
+                type="range" 
+                min="7" 
+                max="180" 
+                value={autoCleanupDays} 
+                onChange={e => setAutoCleanupDays(parseInt(e.target.value))} 
+                className="w-full h-2 bg-gray-100 dark:bg-gray-700 rounded-full appearance-none cursor-pointer accent-primary-600 focus:ring-2 focus:ring-primary-500/20 transition-all" 
+              />
             </div>
-            <div className="bg-amber-50 dark:bg-amber-900/10 p-5 rounded-2xl border border-amber-100 dark:border-amber-800 flex gap-4 text-left">
+            <div className="bg-amber-50 dark:bg-amber-900/10 p-5 rounded-2xl border border-amber-100 dark:border-amber-800/50 flex gap-4 text-left">
               <Clock className="text-amber-500 shrink-0" size={24} />
               <p className="text-[10px] text-amber-700 dark:text-amber-400 font-bold leading-relaxed uppercase">Nettoyage auto des tickets vendus après ce délai pour optimiser le cloud.</p>
             </div>
@@ -146,9 +156,15 @@ const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang, notify }) =
         <Section title="Sécurité Administrateur" icon={<ShieldCheck size={20} />} fullWidth>
           <form onSubmit={handleChangePwd} className="flex flex-col md:flex-row gap-4 items-end text-left w-full">
             <div className="flex-1 w-full space-y-2">
-              <label className="text-[10px] font-black uppercase text-gray-400 ml-2">{t.changePassword}</label>
+              <label className="text-[10px] font-black uppercase text-gray-400 ml-2 tracking-widest leading-none">{t.changePassword}</label>
               <div className="relative">
-                <input type={showPwd ? "text" : "password"} className="input-field pr-12" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="Nouveau mot de passe" />
+                <input 
+                  type={showPwd ? "text" : "password"} 
+                  className="input-field pr-12" 
+                  value={newPassword} 
+                  onChange={e => setNewPassword(e.target.value)} 
+                  placeholder="Nouveau mot de passe" 
+                />
                 <button type="button" onClick={() => setShowPwd(!showPwd)} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-primary-500 transition-all p-2 active:scale-90">
                   {showPwd ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
@@ -161,8 +177,11 @@ const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang, notify }) =
         </Section>
       </div>
 
-      <div className="fixed bottom-10 left-4 right-4 md:relative md:bottom-0 flex justify-center pt-10">
-        <button onClick={() => setShowConfirm(true)} className="w-full md:max-w-md py-6 bg-primary-600 text-white rounded-[2rem] font-black text-lg uppercase tracking-[0.2em] shadow-2xl shadow-primary-500/40 active:scale-[0.98] transition-all flex items-center justify-center gap-4">
+      <div className="fixed bottom-10 left-4 right-4 md:relative md:bottom-0 flex justify-center pt-10 pb-4">
+        <button 
+          onClick={() => setShowConfirm(true)} 
+          className="w-full md:max-w-md py-6 bg-primary-600 text-white rounded-[2rem] font-black text-lg uppercase tracking-[0.2em] shadow-2xl shadow-primary-500/40 active:scale-[0.98] transition-all flex items-center justify-center gap-4"
+        >
           {saved ? <CheckCircle className="w-7 h-7" /> : <div className="flex items-center gap-3"><Save size={24} /> {t.saveSettings}</div>}
         </button>
       </div>
@@ -170,15 +189,26 @@ const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang, notify }) =
       {showConfirm && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-300">
           <div className="bg-white dark:bg-gray-800 w-full max-w-sm rounded-[3rem] p-10 shadow-2xl text-center border dark:border-gray-700">
-            <div className="w-20 h-20 bg-amber-50 text-amber-500 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-inner"><AlertTriangle size={40} /></div>
+            <div className="w-20 h-20 bg-amber-50 dark:bg-amber-900/20 text-amber-500 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-sm">
+              <AlertTriangle size={40} />
+            </div>
             <h3 className="text-2xl font-black uppercase tracking-tight mb-2 text-gray-900 dark:text-white">Sauvegarder ?</h3>
             <p className="text-sm text-gray-500 dark:text-gray-400 font-medium mb-8 leading-relaxed text-center">Ces paramètres affecteront tous les reçus envoyés à vos clients.</p>
             <div className="flex flex-col gap-3">
-              <button onClick={handleSave} disabled={isSaving} className="w-full py-5 bg-primary-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl flex items-center justify-center gap-2 transition-all active:scale-95">
+              <button 
+                onClick={handleSave} 
+                disabled={isSaving} 
+                className="w-full py-5 bg-primary-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl flex items-center justify-center gap-2 transition-all active:scale-95"
+              >
                 {isSaving && <Loader2 className="animate-spin w-4 h-4" />}
                 {t.confirm}
               </button>
-              <button onClick={() => setShowConfirm(false)} className="w-full py-4 text-xs font-black uppercase text-gray-400 active:scale-95 transition-all">Annuler</button>
+              <button 
+                onClick={() => setShowConfirm(false)} 
+                className="w-full py-4 text-xs font-black uppercase text-gray-400 active:scale-95 transition-all"
+              >
+                Annuler
+              </button>
             </div>
           </div>
         </div>
@@ -197,9 +227,9 @@ const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang, notify }) =
           transition: all 0.2s ease;
           color: #111827;
         }
-        .dark .input-field { background-color: rgba(17, 24, 39, 0.6); color: white; }
+        .dark .input-field { background-color: rgba(17, 24, 39, 0.4); border-color: rgba(55, 65, 81, 0.5); color: white; }
         .input-field:focus { border-color: rgba(14, 165, 233, 0.4); background-color: white; box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.1); }
-        .dark .input-field:focus { background-color: #030712; }
+        .dark .input-field:focus { background-color: #030712; border-color: rgba(14, 165, 233, 0.4); }
       `}</style>
     </div>
   );
@@ -208,7 +238,7 @@ const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang, notify }) =
 const Section = ({ title, icon, children, fullWidth }: any) => (
   <div className={`bg-white dark:bg-gray-800 p-8 md:p-10 rounded-[2.5rem] md:rounded-[3rem] border border-gray-100 dark:border-gray-700 shadow-sm space-y-8 flex flex-col ${fullWidth ? 'md:col-span-2' : ''}`}>
     <div className="flex items-center gap-3 text-primary-600 text-left">
-      <div className="p-2 bg-primary-50 dark:bg-primary-900/30 rounded-xl">{icon}</div>
+      <div className="p-2 bg-primary-50 dark:bg-primary-900/30 rounded-xl shrink-0">{icon}</div>
       <h3 className="font-black uppercase tracking-tight dark:text-white text-lg">{title}</h3>
     </div>
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 flex-1">
