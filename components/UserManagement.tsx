@@ -92,7 +92,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
           <div className="col-span-full flex justify-center py-20"><Loader2 className="animate-spin text-primary-500 w-8 h-8" /></div>
         ) : users.map(u => (
           <div key={u.id} className="bg-white dark:bg-gray-800 p-6 rounded-[2rem] border border-gray-100 dark:border-gray-700 flex items-center justify-between shadow-sm hover:shadow-md transition-all group">
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4 text-left">
               <div className="w-12 h-12 bg-gray-50 dark:bg-gray-700 rounded-2xl flex items-center justify-center text-gray-400 group-hover:text-primary-500 transition-colors"><User size={24} /></div>
               <div className="min-w-0">
                 <p className="font-black text-gray-900 dark:text-white uppercase truncate text-sm">{u.display_name}</p>
@@ -121,7 +121,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
             <div className={`w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-lg ${confirmAction.type === 'DELETE' ? 'bg-red-50 text-red-500' : 'bg-amber-50 text-amber-500'}`}>
               <AlertTriangle size={40} />
             </div>
-            <h3 className="text-xl font-black uppercase tracking-tight mb-2">{confirmAction.type === 'DELETE' ? 'Confirmer Suppression' : t.confirm}</h3>
+            <h3 className="text-xl font-black uppercase tracking-tight mb-2 text-gray-900 dark:text-white">{confirmAction.type === 'DELETE' ? 'Confirmer Suppression' : t.confirm}</h3>
             <p className="text-sm text-gray-500 dark:text-gray-400 font-medium leading-relaxed mb-8">
               {confirmAction.type === 'DELETE' ? 'Voulez-vous vraiment supprimer définitivement ce collaborateur de votre équipe ?' : 'Souhaitez-vous valider cette action ?'}
             </p>
@@ -175,7 +175,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-300">
           <div className="bg-white dark:bg-gray-800 w-full max-w-sm rounded-[2.5rem] p-10 shadow-2xl text-center border dark:border-gray-700">
             <div className="w-16 h-16 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center mx-auto mb-6"><Key size={32} /></div>
-            <h3 className="text-xl font-black uppercase mb-4">Nouveau mot de passe</h3>
+            <h3 className="text-xl font-black uppercase mb-4 text-gray-900 dark:text-white">Nouveau mot de passe</h3>
             <div className="space-y-4 mb-8">
               <input type="text" placeholder="Entrez le nouveau MDP" className="w-full p-5 bg-gray-50 dark:bg-gray-900 rounded-2xl outline-none font-black text-center text-lg dark:text-white focus:ring-2 focus:ring-amber-500/20 transition-all" value={resetPwdValue} onChange={e => setResetPwdValue(e.target.value)} />
             </div>
