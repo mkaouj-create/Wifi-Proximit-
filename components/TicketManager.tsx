@@ -1,5 +1,6 @@
+
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Search, FileUp, X, Loader2, Info, Layers } from 'lucide-react';
+import { Search, FileUp, X, Loader2, Info, Layers, CheckCircle2, AlertCircle } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import { Ticket, UserProfile, TicketStatus, UserRole, Agency } from '../types';
 import { translations, Language } from '../i18n';
@@ -30,15 +31,15 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
       
       if (isSuper && agenciesData) {
         setAgencies(agenciesData);
-        const defaultTarget = agenciesData.find((a: Agency) => a.id === user.agency_id) || agenciesData[0];
-        if (defaultTarget) setImportTargetAgencyId(defaultTarget.id);
+        // Si l'agence cible n'est pas encore définie, on prend celle de l'utilisateur par défaut
+        if (!importTargetAgencyId) setImportTargetAgencyId(user.agency_id);
       }
     } catch (err) {
-      notify('error', "Échec de la récupération des données.");
+      notify('error', "Échec de la récupération des données stockées.");
     } finally {
       setLoading(false);
     }
-  }, [user, isSuper, notify]);
+  }, [user.id, user.agency_id, user.role, isSuper, notify]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -48,67 +49,79 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
     
     setIsImporting(true);
     const reader = new FileReader();
+    
     reader.onload = async (ev) => {
       try {
         const text = ev.target?.result as string;
-        if (!text || text.trim().length === 0) throw new Error("Le fichier est vide.");
+        if (!text || text.trim().length === 0) throw new Error("Le fichier sélectionné est vide.");
 
-        const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
-        if (lines.length === 0) throw new Error("Format de fichier non reconnu.");
+        const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+        if (lines.length === 0) throw new Error("Format de fichier non reconnu ou corrompu.");
 
         const firstLine = lines[0];
+        // Détection intelligente du délimiteur
         const delimiter = firstLine.includes(';') ? ';' : firstLine.includes(',') ? ',' : '\t';
         
         const headers = lines[0].toLowerCase().split(delimiter).map(h => h.trim().replace(/^["']|["']$/g, ''));
         
+        // Mapping flexible des colonnes
         const idx = {
-          user: headers.findIndex(h => h.includes('user') || h === 'login' || h === 'identifiant' || h === 'username'),
-          pass: headers.findIndex(h => h.includes('pass') || h === 'pwd' || h === 'password'),
-          prof: headers.findIndex(h => h.includes('prof') || h === 'forfait' || h === 'profile'),
-          price: headers.findIndex(h => h.includes('price') || h === 'prix' || h === 'tarif')
+          user: headers.findIndex(h => h.includes('user') || h === 'login' || h === 'id' || h === 'identifiant' || h === 'username'),
+          pass: headers.findIndex(h => h.includes('pass') || h === 'pwd' || h === 'password' || h === 'mot de passe'),
+          prof: headers.findIndex(h => h.includes('prof') || h === 'forfait' || h === 'profile' || h === 'limit'),
+          price: headers.findIndex(h => h.includes('price') || h === 'prix' || h === 'tarif' || h === 'amount')
         };
 
         const hasHeader = idx.user !== -1;
         const dataLines = hasHeader ? lines.slice(1) : lines;
         
         const rows = dataLines.map(line => {
-          const p = line.split(delimiter).map(v => v.replace(/^["']|["']$/g, '').trim());
+          const parts = line.split(delimiter).map(v => v.replace(/^["']|["']$/g, '').trim());
+          
+          const username = hasHeader ? parts[idx.user] : parts[0];
+          if (!username) return null;
+
           return { 
-            username: hasHeader ? p[idx.user] : p[0], 
-            password: hasHeader ? (idx.pass !== -1 ? p[idx.pass] : p[idx.user]) : (p[1] || p[0]), 
-            profile: hasHeader ? (idx.prof !== -1 ? p[idx.prof] : 'Default') : (p[2] || 'Default'), 
-            price: hasHeader ? (idx.price !== -1 ? Number.parseInt(p[idx.price]?.replace(/\D/g, '')) || 0 : 0) : (Number.parseInt(p[3]?.replace(/\D/g, '')) || 0)
+            username, 
+            password: hasHeader ? (idx.pass !== -1 ? parts[idx.pass] : username) : (parts[1] || username), 
+            profile: hasHeader ? (idx.prof !== -1 ? parts[idx.prof] : 'Standard') : (parts[2] || 'Standard'), 
+            price: hasHeader ? (idx.price !== -1 ? Number.parseInt(parts[idx.price]?.replace(/\D/g, '')) || 0 : 0) : (Number.parseInt(parts[3]?.replace(/\D/g, '')) || 0)
           };
-        }).filter(r => r.username && r.username.length > 0);
+        }).filter((r): r is any => r !== null && r.username.length > 0);
 
-        if (rows.length === 0) throw new Error("Aucun ticket valide trouvé.");
+        if (rows.length === 0) throw new Error("Aucun ticket valide trouvé après analyse du CSV.");
 
-        const target = isSuper ? importTargetAgencyId : user.agency_id;
-        const res = await supabase.importTickets(rows, user.id, target);
+        const targetAid = isSuper ? importTargetAgencyId : user.agency_id;
+        const res = await supabase.importTickets(rows, user.id, targetAid);
         
-        notify('success', `${res.success} tickets importés. Coût: ${res.cost.toFixed(2)} crédits.`);
+        notify('success', `${res.success} tickets importés avec succès. Débit : ${res.cost.toFixed(2)} crédits.`);
         setShowImport(false);
         loadData();
       } catch (err: any) {
-        notify('error', err.message || "Erreur lors de l'importation.");
+        notify('error', err.message || "Une erreur est survenue lors de l'importation.");
       } finally {
         setIsImporting(false);
-        e.target.value = '';
+        if (e.target) e.target.value = '';
       }
     };
+    
     reader.onerror = () => {
-      notify('error', "Impossible de lire le fichier.");
+      notify('error', "Impossible de lire le fichier CSV.");
       setIsImporting(false);
     };
+    
     reader.readAsText(file);
   };
 
-  const filtered = useMemo(() => tickets.filter(tk => {
-    const mSearch = tk.username.toLowerCase().includes(search.toLowerCase()) || tk.profile.toLowerCase().includes(search.toLowerCase());
-    const mStatus = filterStatus === 'ALL' || tk.status === filterStatus;
-    const mAgency = selectedAgency === 'ALL' || tk.agency_id === selectedAgency;
-    return mSearch && mStatus && mAgency;
-  }), [tickets, search, filterStatus, selectedAgency]);
+  const filtered = useMemo(() => {
+    return tickets.filter(tk => {
+      const matchSearch = tk.username.toLowerCase().includes(search.toLowerCase()) || 
+                          tk.profile.toLowerCase().includes(search.toLowerCase());
+      const matchStatus = filterStatus === 'ALL' || tk.status === filterStatus;
+      const matchAgency = selectedAgency === 'ALL' || tk.agency_id === selectedAgency;
+      return matchSearch && matchStatus && matchAgency;
+    });
+  }, [tickets, search, filterStatus, selectedAgency]);
 
   return (
     <div className="space-y-6 pb-20 animate-in fade-in duration-500">
@@ -116,7 +129,7 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
         <div>
           <h2 className="text-2xl md:text-3xl font-black dark:text-white uppercase tracking-tight">{t.inventory}</h2>
           <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest mt-1">
-             {loading ? 'Chargement...' : `${filtered.length} tickets en stock`}
+             {loading ? 'Chargement des données...' : `${filtered.length} tickets en stock pour les critères sélectionnés`}
           </p>
         </div>
         {user.role !== UserRole.SELLER && (
@@ -143,7 +156,7 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
         <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1 md:pb-0">
           {isSuper && (
             <select 
-              className="bg-gray-50 dark:bg-gray-900 px-5 py-3 rounded-xl text-[10px] font-black uppercase outline-none border-none cursor-pointer focus:ring-2 focus:ring-primary-500/20 transition-all" 
+              className="bg-gray-50 dark:bg-gray-900 px-5 py-3 rounded-xl text-[10px] font-black uppercase outline-none border-none cursor-pointer focus:ring-2 focus:ring-primary-500/20 transition-all dark:text-gray-300" 
               value={selectedAgency} 
               onChange={e => setSelectedAgency(e.target.value)}
             >
@@ -152,21 +165,22 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
             </select>
           )}
           <select 
-            className="bg-gray-50 dark:bg-gray-900 px-5 py-3 rounded-xl text-[10px] font-black uppercase outline-none border-none cursor-pointer focus:ring-2 focus:ring-primary-500/20 transition-all" 
+            className="bg-gray-50 dark:bg-gray-900 px-5 py-3 rounded-xl text-[10px] font-black uppercase outline-none border-none cursor-pointer focus:ring-2 focus:ring-primary-500/20 transition-all dark:text-gray-300" 
             value={filterStatus} 
             onChange={e => setFilterStatus(e.target.value as any)}
           >
-            <option value="ALL">Tous Statuts</option>
+            <option value="ALL">Tous les états</option>
             <option value="UNSOLD">{t.unsold}</option>
             <option value="SOLD">{t.sold}</option>
           </select>
         </div>
       </div>
 
-      <div className="bg-white dark:bg-gray-800 rounded-[2rem] overflow-hidden border dark:border-gray-700 shadow-xl shadow-gray-200/20 dark:shadow-none min-h-[300px] relative">
+      <div className="bg-white dark:bg-gray-800 rounded-[2rem] overflow-hidden border dark:border-gray-700 shadow-xl shadow-gray-200/20 dark:shadow-none min-h-[400px] relative">
         {loading && (
-          <div className="absolute inset-0 flex items-center justify-center bg-white/50 dark:bg-gray-800/50 backdrop-blur-[2px] z-10">
-            <Loader2 className="animate-spin text-primary-600" size={32} />
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/50 dark:bg-gray-800/50 backdrop-blur-[2px] z-10">
+            <Loader2 className="animate-spin text-primary-600 mb-2" size={32} />
+            <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Synchronisation...</span>
           </div>
         )}
         
@@ -174,23 +188,23 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
           <table className="w-full text-left">
             <thead className="bg-gray-50/50 dark:bg-gray-700/50 text-[10px] font-black uppercase tracking-widest text-gray-400">
               <tr>
-                <th className="px-6 py-5">Utilisateur / Identifiant</th>
-                <th className="px-6 py-5">Profil Tarifaire</th>
-                <th className="px-6 py-5 text-right">Prix Unitaire</th>
+                <th className="px-6 py-5">Identifiant WiFi</th>
+                <th className="px-6 py-5">Forfait Client</th>
+                <th className="px-6 py-5 text-right">Tarif Unitaire</th>
                 <th className="px-6 py-5 text-center">État Stock</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
-              {filtered.slice(0, 100).map(tk => (
+              {filtered.slice(0, 150).map(tk => (
                 <tr key={tk.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors group">
                   <td className="px-6 py-4">
                     <div className="flex flex-col">
                       <span className="font-black text-xs dark:text-white uppercase tracking-tight group-hover:text-primary-600 transition-colors">{tk.username}</span>
-                      {isSuper && <span className="text-[8px] text-gray-400 font-bold uppercase tracking-tighter mt-1">{agencies.find(a => a.id === tk.agency_id)?.name}</span>}
+                      {isSuper && <span className="text-[8px] text-gray-400 font-bold uppercase tracking-tighter mt-1">{agencies.find(a => a.id === tk.agency_id)?.name || 'N/A'}</span>}
                     </div>
                   </td>
                   <td className="px-6 py-4">
-                    <span className="text-[10px] font-bold text-gray-500 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded-lg uppercase tracking-tight">{tk.profile}</span>
+                    <span className="text-[10px] font-bold text-gray-500 bg-gray-100 dark:bg-gray-800 px-3 py-1.5 rounded-lg uppercase tracking-tight border border-transparent dark:border-gray-700">{tk.profile}</span>
                   </td>
                   <td className="px-6 py-4 text-right">
                     <span className="font-black text-xs tabular-nums dark:text-white">
@@ -198,13 +212,16 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
                     </span>
                   </td>
                   <td className="px-6 py-4 text-center">
-                    <span className={`px-2.5 py-1.5 rounded-xl text-[8px] font-black uppercase tracking-widest shadow-sm ${
-                      tk.status === TicketStatus.UNSOLD 
-                      ? 'bg-green-50 text-green-600 border border-green-100 dark:bg-green-900/10 dark:border-green-800' 
-                      : 'bg-blue-50 text-blue-600 border border-blue-100 dark:bg-blue-900/10 dark:border-blue-800'
-                    }`}>
-                      {tk.status === TicketStatus.UNSOLD ? t.unsold : t.sold}
-                    </span>
+                    <div className="flex justify-center">
+                      <span className={`px-3 py-1.5 rounded-xl text-[8px] font-black uppercase tracking-widest shadow-sm flex items-center gap-1.5 ${
+                        tk.status === TicketStatus.UNSOLD 
+                        ? 'bg-green-50 text-green-600 border border-green-100 dark:bg-green-900/20 dark:border-green-800' 
+                        : 'bg-blue-50 text-blue-600 border border-blue-100 dark:bg-blue-900/20 dark:border-blue-800'
+                      }`}>
+                        {tk.status === TicketStatus.UNSOLD ? <CheckCircle2 size={10}/> : <Layers size={10}/>}
+                        {tk.status === TicketStatus.UNSOLD ? t.unsold : t.sold}
+                      </span>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -214,7 +231,8 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
           {!loading && filtered.length === 0 && (
             <div className="py-32 flex flex-col items-center justify-center text-gray-400">
               <Layers className="w-16 h-16 opacity-10 mb-4" />
-              <p className="font-black uppercase text-[10px] tracking-[0.3em]">Aucun ticket trouvé</p>
+              <p className="font-black uppercase text-[10px] tracking-[0.3em]">Aucune donnée à afficher</p>
+              <button onClick={loadData} className="mt-4 text-[9px] font-bold text-primary-500 underline">Rafraîchir l'inventaire</button>
             </div>
           )}
         </div>
@@ -235,7 +253,7 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
                 <Info size={22} />
               </div>
               <div className="space-y-1">
-                <p className="text-[10px] text-amber-700 dark:text-amber-500 font-black uppercase tracking-widest">Tarification</p>
+                <p className="text-[10px] text-amber-700 dark:text-amber-500 font-black uppercase tracking-widest">Informations Tarifs</p>
                 <p className="text-[10px] text-gray-500 dark:text-gray-400 font-medium leading-relaxed">{t.importRuleInfo}</p>
               </div>
             </div>
@@ -243,7 +261,7 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
             <div className="space-y-6">
               {isSuper && (
                 <div className="space-y-2">
-                  <label className="text-[9px] font-black text-gray-400 uppercase ml-3 tracking-widest">Agence Cible</label>
+                  <label className="text-[9px] font-black text-gray-400 uppercase ml-3 tracking-widest">Agence de destination</label>
                   <select 
                     className="w-full p-5 bg-gray-50 dark:bg-gray-900 rounded-2xl outline-none font-black text-xs uppercase tracking-tight border-2 border-transparent focus:border-primary-500/30 transition-all appearance-none cursor-pointer dark:text-white"
                     value={importTargetAgencyId}
@@ -263,15 +281,15 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
                   {isImporting ? (
                     <div className="flex flex-col items-center gap-3">
                       <Loader2 size={40} className="animate-spin text-primary-600"/>
-                      <p className="font-black text-[10px] text-primary-600 uppercase tracking-widest animate-pulse">Traitement en cours...</p>
+                      <p className="font-black text-[10px] text-primary-600 uppercase tracking-widest animate-pulse">Analyse en cours...</p>
                     </div>
                   ) : (
                     <div className="flex flex-col items-center gap-3">
-                      <div className="w-14 h-14 bg-primary-50 dark:bg-primary-900/20 text-primary-600 rounded-2xl flex items-center justify-center mb-1">
+                      <div className="w-14 h-14 bg-primary-50 dark:bg-primary-900/30 text-primary-600 rounded-2xl flex items-center justify-center mb-1">
                          <FileUp size={30} />
                       </div>
-                      <p className="font-black text-[11px] text-gray-500 dark:text-gray-300 uppercase tracking-widest">Cliquer pour charger</p>
-                      <p className="text-[9px] text-gray-400 font-medium">Format supporté : .csv</p>
+                      <p className="font-black text-[11px] text-gray-600 dark:text-gray-300 uppercase tracking-widest">Sélectionner CSV</p>
+                      <p className="text-[9px] text-gray-400 font-medium">Glisser-déposer ou cliquer</p>
                     </div>
                   )}
                   <input type="file" accept=".csv" onChange={handleImport} className="hidden" disabled={isImporting} />
