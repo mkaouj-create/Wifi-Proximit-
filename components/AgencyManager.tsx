@@ -32,9 +32,12 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, notify }) => {
   const [agencyToManage, setAgencyToManage] = useState<Agency | null>(null);
   const [agencyToRecharge, setAgencyToRecharge] = useState<Agency | null>(null);
   const [agencyToSubscribe, setAgencyToSubscribe] = useState<Agency | null>(null);
+  const [agencyToDelete, setAgencyToDelete] = useState<Agency | null>(null);
+  const [agencyToEditBasic, setAgencyToEditBasic] = useState<Agency | null>(null);
   
   // Form states
   const [newAgencyName, setNewAgencyName] = useState('');
+  const [editAgencyName, setEditAgencyName] = useState('');
   const [rechargeAmount, setRechargeAmount] = useState('50');
   const [editingPlan, setEditingPlan] = useState<Partial<SubscriptionPlan> | null>(null);
   const [selectedModules, setSelectedModules] = useState<AgencyModules>({
@@ -75,6 +78,37 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, notify }) => {
       notify('error', "Échec de création.");
     } finally {
       setIsProcessing(false);
+    }
+  };
+
+  const handleUpdateBasic = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!agencyToEditBasic || !editAgencyName || isProcessing) return;
+    setIsProcessing(true);
+    try {
+        await supabase.updateAgency(agencyToEditBasic.id, editAgencyName, {}, user);
+        notify('success', "Agence mise à jour.");
+        setAgencyToEditBasic(null);
+        loadAgencies();
+    } catch (e) {
+        notify('error', "Erreur lors de la mise à jour.");
+    } finally {
+        setIsProcessing(false);
+    }
+  };
+
+  const handleDeleteAgency = async () => {
+    if (!agencyToDelete || isProcessing) return;
+    setIsProcessing(true);
+    try {
+        await supabase.deleteAgency(agencyToDelete.id, user);
+        notify('success', "Agence supprimée définitivement.");
+        setAgencyToDelete(null);
+        loadAgencies();
+    } catch (e) {
+        notify('error', "Échec de la suppression.");
+    } finally {
+        setIsProcessing(false);
     }
   };
 
@@ -154,7 +188,7 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, notify }) => {
       {/* Header UI */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
-          <h2 className="text-3xl font-black dark:text-white uppercase">Agences</h2>
+          <h2 className="text-3xl font-black dark:text-white uppercase">GESTA WIFI AGENCES</h2>
           <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest">SaaS & Réseau</p>
         </div>
         <div className="flex gap-2">
@@ -199,7 +233,10 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, notify }) => {
                   </div>
                 </div>
                 
-                <h3 className="text-xl font-black dark:text-white mb-1 uppercase truncate">{agency.name}</h3>
+                <div className="flex justify-between items-center mb-1">
+                  <h3 className="text-xl font-black dark:text-white uppercase truncate">{agency.name}</h3>
+                  <button onClick={() => { setAgencyToEditBasic(agency); setEditAgencyName(agency.name); }} className="p-1.5 text-gray-400 hover:text-primary-500 transition-colors"><Edit3 size={14} /></button>
+                </div>
                 <p className="text-[9px] text-gray-400 font-black uppercase tracking-widest mb-6">{agency.plan_name}</p>
                 
                 <div className="grid grid-cols-2 gap-3 mb-8">
@@ -217,8 +254,11 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, notify }) => {
               <div className="grid grid-cols-2 gap-2 pt-6 border-t border-gray-100 dark:border-gray-700">
                 <button onClick={() => setAgencyToSubscribe(agency)} className="py-3 bg-indigo-600 text-white rounded-xl text-[9px] font-black uppercase hover:bg-indigo-700 transition-all active:scale-95"><Star size={14} className="mx-auto mb-1"/> Licence</button>
                 <button onClick={() => setAgencyToRecharge(agency)} className="py-3 bg-amber-500 text-white rounded-xl text-[9px] font-black uppercase hover:bg-amber-600 transition-all active:scale-95"><Plus size={14} className="mx-auto mb-1"/> Crédits</button>
-                <button onClick={() => { setAgencyToManage(agency); setSelectedModules(agency.settings?.modules || selectedModules); }} className="py-3 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-white rounded-xl text-[9px] font-black uppercase active:scale-95"><Edit3 size={14} className="mx-auto mb-1"/> Modules</button>
-                <button onClick={() => handleToggleStatus(agency)} className={`py-3 rounded-xl text-[9px] font-black uppercase active:scale-95 ${isActive ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>{isActive ? <PowerOff size={14} className="mx-auto mb-1"/> : <Power size={14} className="mx-auto mb-1"/>} {isActive ? 'Bloquer' : 'Activer'}</button>
+                <button onClick={() => { setAgencyToManage(agency); setSelectedModules(agency.settings?.modules || selectedModules); }} className="py-3 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-white rounded-xl text-[9px] font-black uppercase active:scale-95"><Settings2 size={14} className="mx-auto mb-1"/> Modules</button>
+                <div className="grid grid-cols-2 gap-1">
+                    <button onClick={() => handleToggleStatus(agency)} className={`py-3 rounded-xl text-[9px] font-black uppercase active:scale-95 ${isActive ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>{isActive ? <PowerOff size={14} className="mx-auto mb-1"/> : <Power size={14} className="mx-auto mb-1"/>} {isActive ? 'OFF' : 'ON'}</button>
+                    <button onClick={() => setAgencyToDelete(agency)} className="py-3 bg-red-600 text-white rounded-xl text-[9px] font-black uppercase hover:bg-red-700 transition-all active:scale-95"><Trash2 size={14} className="mx-auto mb-1"/> Suppr.</button>
+                </div>
               </div>
             </div>
           );
@@ -244,6 +284,44 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, notify }) => {
         </div>
       )}
 
+      {/* Modal Edit Basic Info */}
+      {agencyToEditBasic && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in">
+          <div className="bg-white dark:bg-gray-800 w-full max-w-sm rounded-[3rem] p-10 shadow-2xl animate-in zoom-in border dark:border-gray-700">
+            <div className="text-center mb-8">
+              <div className="w-16 h-16 bg-primary-100 text-primary-600 rounded-3xl flex items-center justify-center mx-auto mb-4"><Edit3 size={32} /></div>
+              <h3 className="text-2xl font-black uppercase">Modifier Agence</h3>
+            </div>
+            <form onSubmit={handleUpdateBasic} className="space-y-6">
+              <input type="text" autoFocus className="w-full p-5 bg-gray-50 dark:bg-gray-900 border-none rounded-2xl font-bold dark:text-white outline-none" placeholder="Nom de l'agence..." value={editAgencyName} onChange={(e) => setEditAgencyName(e.target.value)} required />
+              <div className="flex gap-4">
+                <button type="button" onClick={() => setAgencyToEditBasic(null)} className="flex-1 py-4 bg-gray-100 dark:bg-gray-700 rounded-2xl font-black text-xs uppercase">Annuler</button>
+                <button type="submit" disabled={isProcessing} className="flex-1 py-4 bg-primary-600 text-white rounded-2xl font-black text-xs uppercase shadow-lg flex items-center justify-center gap-2">{isProcessing ? <Loader2 size={16} className="animate-spin"/> : <Save size={16}/>} Sauvegarder</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Delete Confirmation */}
+      {agencyToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in">
+          <div className="bg-white dark:bg-gray-800 w-full max-w-sm rounded-[3rem] p-10 shadow-2xl animate-in zoom-in border-2 border-red-500">
+             <div className="text-center mb-8">
+                <div className="w-16 h-16 bg-red-100 text-red-600 rounded-[1.5rem] flex items-center justify-center mx-auto mb-4"><AlertTriangle size={32} /></div>
+                <h3 className="text-xl font-black uppercase text-red-600">Suppression Définitive</h3>
+                <p className="mt-2 text-sm text-gray-500 dark:text-gray-400 font-medium">Êtes-vous sûr de vouloir supprimer <span className="font-black text-gray-900 dark:text-white">"{agencyToDelete.name}"</span> ? Cette action est irréversible.</p>
+             </div>
+             <div className="flex flex-col gap-3">
+                <button onClick={handleDeleteAgency} disabled={isProcessing} className="w-full py-5 bg-red-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-red-500/20 active:scale-95 flex justify-center items-center gap-2">
+                    {isProcessing ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />} Confirmer Suppression
+                </button>
+                <button onClick={() => setAgencyToDelete(null)} className="w-full py-4 bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white rounded-2xl font-black text-xs uppercase">Annuler</button>
+             </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal: Modules */}
       {agencyToManage && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in">
@@ -265,7 +343,7 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ user, notify }) => {
         </div>
       )}
 
-      {/* Modal: Plans Editor (Complet CRUD) */}
+      {/* Modal: Plans Editor (CRUD) */}
       {showPlans && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in">
           <div className="bg-white dark:bg-gray-800 w-full max-w-4xl h-[80vh] rounded-[3rem] p-10 shadow-2xl flex flex-col border dark:border-gray-700">

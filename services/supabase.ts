@@ -1,3 +1,4 @@
+
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { 
   UserRole, 
@@ -55,7 +56,7 @@ const DEMO_USER_ID = 'user-demo-001';
 
 const MOCK_AGENCY: Agency = {
   id: DEMO_AGENCY_ID,
-  name: 'WiFi Zone Démo',
+  name: 'GESTA WIFI Démo',
   status: 'active',
   credits_balance: 250,
   plan_name: 'Business',
@@ -64,7 +65,7 @@ const MOCK_AGENCY: Agency = {
   settings: {
     currency: 'XOF',
     contact_phone: '+221 77 000 00 00',
-    whatsapp_receipt_header: '*WIFI ZONE PRO*',
+    whatsapp_receipt_header: '*GESTA WIFI PRO*',
     modules: { dashboard: true, sales: true, history: true, tickets: true, team: true, tasks: true }
   },
   created_at: new Date().toISOString()
@@ -222,6 +223,14 @@ class SupabaseService {
     if (error) throw error;
     
     if (actor) await this.log(actor, 'AGENCY_UPDATE', `Mise à jour paramètres`);
+  }
+
+  async deleteAgency(id: string, actor: UserProfile): Promise<void> {
+    if (!this.isConfigured()) return;
+    if (actor.role !== UserRole.SUPER_ADMIN) throw new Error("Permission refusée.");
+    const { error } = await client.from('agencies').delete().eq('id', id);
+    if (error) throw error;
+    await this.log(actor, 'AGENCY_DELETE', `Agence ${id} supprimée`);
   }
 
   async updateAgencyModules(id: string, modules: AgencyModules, actor: UserProfile): Promise<void> {

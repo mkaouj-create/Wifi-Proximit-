@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { LayoutDashboard, ShoppingBag, Database, ShieldCheck, ArrowRight, CheckCircle2, Wifi, Globe, Smartphone, Star, Zap, CreditCard, Loader2 } from 'lucide-react';
 import { supabase } from '../services/supabase';
@@ -32,8 +33,8 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLoginClick }) => {
       <header className="fixed top-0 left-0 right-0 z-50 bg-white/80 dark:bg-gray-950/80 backdrop-blur-md border-b border-gray-100 dark:border-gray-800">
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-primary-600 rounded-xl flex items-center justify-center text-white font-black text-xl shadow-lg shadow-primary-500/20">W</div>
-            <span className="font-black text-lg tracking-tight dark:text-white">Wifi <span className="text-primary-600">Pro</span></span>
+            <div className="w-10 h-10 bg-primary-600 rounded-xl flex items-center justify-center text-white font-black text-xl shadow-lg shadow-primary-500/20">G</div>
+            <span className="font-black text-lg tracking-tight dark:text-white">Gesta <span className="text-primary-600">Wifi</span></span>
           </div>
           <button 
             onClick={onLoginClick}
@@ -210,7 +211,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLoginClick }) => {
           <div className="relative z-10 space-y-8">
             <h2 className="text-3xl lg:text-5xl font-black tracking-tight leading-tight">Prêt à optimiser votre business ?</h2>
             <p className="text-primary-100 text-base md:text-lg font-medium max-w-2xl mx-auto">
-              Rejoignez les professionnels qui utilisent Wifi Pro pour gérer leur distribution de tickets.
+              Rejoignez les professionnels qui utilisent Gesta Wifi pour gérer leur distribution de tickets.
             </p>
             <button 
               onClick={onLoginClick}
@@ -226,8 +227,8 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLoginClick }) => {
       <footer className="py-12 bg-white dark:bg-gray-950 border-t border-gray-100 dark:border-gray-800">
         <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-6 text-sm font-medium text-gray-500">
           <div className="flex items-center gap-2">
-             <div className="w-6 h-6 bg-gray-200 dark:bg-gray-800 rounded-lg flex items-center justify-center text-xs font-black">W</div>
-             <span>© 2025 Wifi Pro SaaS.</span>
+             <div className="w-6 h-6 bg-gray-200 dark:bg-gray-800 rounded-lg flex items-center justify-center text-xs font-black">G</div>
+             <span>© 2025 Gesta Wifi SaaS.</span>
           </div>
           <div className="flex gap-6 md:gap-8 text-xs md:text-sm">
             <span className="text-gray-300 dark:text-gray-700 cursor-not-allowed select-none">Support</span>

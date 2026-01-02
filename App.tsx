@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   LayoutDashboard, ShoppingBag, Database, Users, Lock, Sun, Moon, 
@@ -178,7 +179,7 @@ const App: React.FC = () => {
 
   if (currentView === 'LOADING') return (
     <div className="min-h-screen bg-white dark:bg-gray-950 flex flex-col items-center justify-center gap-4">
-      <div className="w-12 h-12 bg-primary-600 rounded-2xl animate-bounce flex items-center justify-center text-white font-black text-xl">W</div>
+      <div className="w-12 h-12 bg-primary-600 rounded-2xl animate-bounce flex items-center justify-center text-white font-black text-xl">G</div>
       <Loader2 className="animate-spin text-primary-600" size={24} />
     </div>
   );
@@ -202,7 +203,7 @@ const App: React.FC = () => {
             <button onClick={() => setShowLogin(false)} className="absolute top-6 left-6 p-2 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-2xl transition-all"><ArrowLeft size={24} /></button>
             <div className="text-center pt-8 mb-8">
               <div className="w-16 h-16 bg-primary-50 dark:bg-primary-900/30 text-primary-600 rounded-[2rem] flex items-center justify-center mx-auto mb-4 shadow-inner"><Lock size={28} /></div>
-              <h1 className="text-2xl font-black uppercase tracking-tighter dark:text-white">Wifi Pro</h1>
+              <h1 className="text-2xl font-black uppercase tracking-tighter dark:text-white">Gesta Wifi</h1>
               <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest">SaaS Console</p>
             </div>
             <form onSubmit={handleLogin} className="space-y-4">
@@ -282,8 +283,8 @@ const App: React.FC = () => {
           {/* DESKTOP SIDEBAR */}
           <aside className="hidden lg:flex fixed left-0 top-0 bottom-0 w-[280px] bg-white dark:bg-gray-900 border-r dark:border-gray-800 flex-col p-8 z-50 shadow-sm">
             <div className="flex items-center gap-4 mb-14">
-              <div className="w-12 h-12 bg-primary-600 rounded-2xl flex items-center justify-center text-white font-black text-xl shadow-xl shadow-primary-600/20">W</div>
-              <h1 className="text-xl font-black dark:text-white uppercase tracking-tighter">Wifi Pro</h1>
+              <div className="w-12 h-12 bg-primary-600 rounded-2xl flex items-center justify-center text-white font-black text-xl shadow-xl shadow-primary-600/20">G</div>
+              <h1 className="text-xl font-black dark:text-white uppercase tracking-tighter">Gesta Wifi</h1>
             </div>
             <nav className="space-y-1 flex-1 overflow-y-auto no-scrollbar">
               <NavItem icon={<LayoutDashboard/>} label={t.dashboard} active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />

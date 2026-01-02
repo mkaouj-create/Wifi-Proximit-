@@ -4,7 +4,7 @@ export type Language = 'fr' | 'en';
 
 export const translations = {
   fr: {
-    appName: "Wifi Proximité",
+    appName: "Gesta Wifi",
     dashboard: "Tableau de Bord",
     terminal: "Terminal Vente",
     tickets: "Gestion Stock",
@@ -175,7 +175,7 @@ export const translations = {
     mostPopular: "Le plus populaire"
   },
   en: {
-    appName: "Wifi Proximity",
+    appName: "Gesta Wifi",
     dashboard: "Dashboard",
     terminal: "Sales Terminal",
     tickets: "Inventory",
