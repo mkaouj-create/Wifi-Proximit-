@@ -1,7 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-// Added 'Layers' to imports from lucide-react to fix "Cannot find name 'Layers'" error
-import { Search, FileUp, X, Edit2, Trash2, Loader2, Info, CheckCircle2, AlertCircle, Layers } from 'lucide-react';
+import { Search, FileUp, X, Loader2, Info, Layers } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import { Ticket, UserProfile, TicketStatus, UserRole, Agency } from '../types';
 import { translations, Language } from '../i18n';
