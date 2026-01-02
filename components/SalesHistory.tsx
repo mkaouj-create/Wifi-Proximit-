@@ -43,7 +43,6 @@ const SalesHistory: React.FC<SalesHistoryProps> = ({ user, lang }) => {
   const handleCancelSale = async () => {
     if (!saleToCancel) return;
     try {
-      // Pass user as actor for logging
       await supabase.cancelSale(saleToCancel.id, user);
       setSaleToCancel(null);
       loadData();
@@ -127,7 +126,6 @@ const SalesHistory: React.FC<SalesHistoryProps> = ({ user, lang }) => {
           </div>
         )}
         
-        {/* VIEW TABLE (Desktop) */}
         <div className="hidden md:block overflow-x-auto no-scrollbar">
           <table className="w-full text-left">
             <thead className="bg-gray-50/50 dark:bg-gray-700/50 text-[10px] font-black uppercase tracking-widest text-gray-400">
@@ -189,7 +187,6 @@ const SalesHistory: React.FC<SalesHistoryProps> = ({ user, lang }) => {
           </table>
         </div>
 
-        {/* VIEW CARDS (Mobile) */}
         <div className="md:hidden grid grid-cols-1 divide-y dark:divide-gray-700">
            {filteredSales.slice(0, 50).map(sale => (
              <div key={sale.id} onClick={() => setSelectedSale(sale)} className="p-5 active:bg-gray-50 dark:active:bg-gray-900 transition-colors flex items-center justify-between">
@@ -221,35 +218,28 @@ const SalesHistory: React.FC<SalesHistoryProps> = ({ user, lang }) => {
         )}
       </div>
 
-      {/* MODAL DETAILS - OPTIMIZED MOBILE */}
       {selectedSale && (
-        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center p-0 md:p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
-           {/* Mobile: max-h-[85vh] prevents overflow, flex-col enables sticky bottom buttons */}
+        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center p-0 md:p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-300">
            <div className="bg-white/95 dark:bg-gray-800/95 backdrop-blur-2xl w-full md:max-w-sm max-h-[85vh] md:h-auto rounded-t-[2.5rem] md:rounded-[3rem] p-6 md:p-10 shadow-2xl animate-in slide-in-from-bottom md:zoom-in duration-300 relative border-t border-white/20 dark:border-gray-700/50 flex flex-col">
                
-               {/* Close Button */}
                <button onClick={() => setSelectedSale(null)} className="absolute top-6 right-6 p-2 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-400 hover:text-gray-900 dark:hover:text-white transition-all active:scale-90 z-20">
                  <X className="w-5 h-5" />
                </button>
 
-               {/* Scrollable Content */}
                <div className="flex-1 overflow-y-auto no-scrollbar pt-2 pb-6">
                  <div className="text-center space-y-3 mb-6">
                      <div className="w-16 h-16 bg-primary-100 dark:bg-primary-900/30 text-primary-600 rounded-[2rem] flex items-center justify-center mx-auto shadow-lg shadow-primary-500/10"><Tag size={32} /></div>
                      <h3 className="text-xl font-black text-gray-900 dark:text-white uppercase tracking-tight">Détails Vente</h3>
                  </div>
                  
-                 {/* Layout en Grille pour : 1. Wifi & Prix, 2. Validité & WhatsApp */}
                  <div className="grid grid-cols-2 gap-3">
-                     <DetailRow icon={<Wifi className="text-primary-500" />} label="Code Wifi" val={selectedSale.ticket_username || 'N/A'} isBold />
-                     <DetailRow icon={<Banknote className="text-green-500" />} label="Prix" val={`${selectedSale.amount.toLocaleString()} ${currency}`} />
-                     
-                     <DetailRow icon={<Clock className="text-amber-500" />} label="Validité" val={selectedSale.ticket_time_limit || 'N/A'} />
-                     <DetailRow icon={<Phone className="text-blue-500" />} label="WhatsApp" val={selectedSale.customer_phone || 'N/A'} />
+                     <DetailRow icon={<Wifi />} label="Code Wifi" val={selectedSale.ticket_username || 'N/A'} isBold color="text-primary-500" />
+                     <DetailRow icon={<Banknote />} label="Prix" val={`${selectedSale.amount.toLocaleString()} ${currency}`} color="text-green-500" />
+                     <DetailRow icon={<Clock />} label="Validité" val={selectedSale.ticket_time_limit || 'N/A'} color="text-amber-500" />
+                     <DetailRow icon={<Phone />} label="WhatsApp" val={selectedSale.customer_phone || 'N/A'} color="text-blue-500" />
                  </div>
                </div>
 
-               {/* Sticky Action Buttons */}
                <div className="mt-auto pt-4 border-t border-gray-100 dark:border-gray-700/50">
                  <div className="flex gap-3 mb-3">
                    <button onClick={handleCopy} className="flex-1 py-4 bg-gray-100 dark:bg-gray-700/50 text-gray-900 dark:text-white rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 active:scale-95 transition-all">{copied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />} {t.copyCode}</button>
@@ -263,7 +253,6 @@ const SalesHistory: React.FC<SalesHistoryProps> = ({ user, lang }) => {
         </div>
       )}
 
-      {/* CONFIRM CANCEL MODAL */}
       {saleToCancel && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in">
           <div className="bg-white dark:bg-gray-800 w-full max-w-sm rounded-[3rem] p-10 shadow-2xl animate-in zoom-in text-center border dark:border-gray-700">
@@ -281,12 +270,14 @@ const SalesHistory: React.FC<SalesHistoryProps> = ({ user, lang }) => {
   );
 };
 
-const DetailRow = ({ icon, label, val, isBold = false }: any) => (
-    <div className="bg-gray-50 dark:bg-gray-900/50 p-3 rounded-2xl flex items-center gap-3 border border-transparent dark:border-gray-700/30 overflow-hidden">
-        <div className="p-2.5 bg-white dark:bg-gray-800 rounded-xl shadow-sm shrink-0">{icon}</div>
+const DetailRow = ({ icon, label, val, isBold = false, color }: any) => (
+    <div className="bg-gray-50 dark:bg-gray-900/50 p-2.5 rounded-2xl flex items-center gap-2.5 border border-transparent dark:border-gray-700/30 overflow-hidden">
+        <div className="p-1.5 bg-white dark:bg-gray-800 rounded-lg shadow-sm shrink-0">
+          {React.cloneElement(icon as React.ReactElement, { size: 14, className: color })}
+        </div>
         <div className="min-w-0 flex-1">
-            <p className="text-[9px] text-gray-400 font-black uppercase tracking-widest leading-none mb-1 truncate">{label}</p>
-            <p className={`font-black uppercase truncate leading-none ${isBold ? 'text-base md:text-lg text-primary-600 dark:text-primary-400' : 'text-xs md:text-sm text-gray-900 dark:text-white'}`}>{val}</p>
+            <p className="text-[8px] text-gray-400 font-black uppercase tracking-widest leading-none mb-1 truncate">{label}</p>
+            <p className={`font-black uppercase truncate leading-none ${isBold ? 'text-sm text-primary-600 dark:text-primary-400' : 'text-[11px] text-gray-900 dark:text-white'}`}>{val}</p>
         </div>
     </div>
 );
