@@ -19,7 +19,6 @@ const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang, notify }) =
   const [contactPhone, setContactPhone] = useState('');
   const [supportEmail, setSupportEmail] = useState('');
   const [businessAddress, setBusinessAddress] = useState('');
-  const [autoCleanupDays, setAutoCleanupDays] = useState(30);
   
   const [saved, setSaved] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -45,7 +44,6 @@ const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang, notify }) =
         setContactPhone(data.settings?.contact_phone || '');
         setSupportEmail(data.settings?.support_email || '');
         setBusinessAddress(data.settings?.business_address || '');
-        setAutoCleanupDays(data.settings?.auto_cleanup_days || 30);
       }
     } catch (e) { console.error(e); }
   };
@@ -60,8 +58,7 @@ const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang, notify }) =
         whatsapp_receipt_footer: receiptFooter,
         contact_phone: contactPhone,
         support_email: supportEmail,
-        business_address: businessAddress,
-        auto_cleanup_days: autoCleanupDays
+        business_address: businessAddress
       }, user);
       setSaved(true);
       setShowConfirm(false);
@@ -128,29 +125,6 @@ const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang, notify }) =
         <Section title={t.receiptSettings} icon={<MessageSquare size={20} />}>
           <Field label={t.receiptHeader}><textarea value={receiptHeader} onChange={e => setReceiptHeader(e.target.value)} className="input-field min-h-[100px] resize-none" placeholder="Texte en haut du reçu..." /></Field>
           <Field label={t.receiptFooter}><textarea value={receiptFooter} onChange={e => setReceiptFooter(e.target.value)} className="input-field min-h-[100px] resize-none" placeholder="Texte en bas du reçu..." /></Field>
-        </Section>
-
-        <Section title="Maintenance & Stock" icon={<Trash2 size={20} />} fullWidth>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-center">
-            <div className="md:col-span-2 space-y-4">
-              <div className="flex justify-between items-center px-2">
-                <label className="text-[11px] font-black uppercase text-gray-500 tracking-widest leading-none">{t.autoCleanup}</label>
-                <span className="bg-primary-50 dark:bg-primary-900/30 text-primary-600 px-3 py-1 rounded-lg font-black text-xs">{autoCleanupDays} jours</span>
-              </div>
-              <input 
-                type="range" 
-                min="7" 
-                max="180" 
-                value={autoCleanupDays} 
-                onChange={e => setAutoCleanupDays(parseInt(e.target.value))} 
-                className="w-full h-2 bg-gray-100 dark:bg-gray-700 rounded-full appearance-none cursor-pointer accent-primary-600 focus:ring-2 focus:ring-primary-500/20 transition-all" 
-              />
-            </div>
-            <div className="bg-amber-50 dark:bg-amber-900/10 p-5 rounded-2xl border border-amber-100 dark:border-amber-800/50 flex gap-4 text-left">
-              <Clock className="text-amber-500 shrink-0" size={24} />
-              <p className="text-[10px] text-amber-700 dark:text-amber-400 font-bold leading-relaxed uppercase">Nettoyage auto des tickets vendus après ce délai pour optimiser le cloud.</p>
-            </div>
-          </div>
         </Section>
 
         <Section title="Sécurité Administrateur" icon={<ShieldCheck size={20} />} fullWidth>
