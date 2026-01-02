@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { UserPlus, User, Shield, Mail, Edit3, X, Check, Building2, Lock, KeyRound, AlertTriangle, Key, Loader2, Trash2 } from 'lucide-react';
+import { UserPlus, User, Shield, Mail, X, Building2, Lock, KeyRound, AlertTriangle, Key, Loader2, Trash2 } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import { UserProfile, UserRole, Agency } from '../types';
 import { translations, Language } from '../i18n';
@@ -17,9 +17,8 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   
-  const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
   const [passwordModalUser, setPasswordModalUser] = useState<UserProfile | null>(null);
-  const [confirmAction, setConfirmAction] = useState<{type: 'ADD' | 'UPDATE' | 'PWD' | 'DELETE', payload?: any} | null>(null);
+  const [confirmAction, setConfirmAction] = useState<{type: 'ADD' | 'PWD' | 'DELETE', payload?: any} | null>(null);
 
   const [formData, setFormData] = useState({
     email: '', password: '', pin: '', role: UserRole.SELLER, agencyId: user.agency_id
@@ -68,14 +67,10 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
           setPasswordModalUser(null);
           setResetPwdValue('');
           break;
-        case 'UPDATE':
-          await supabase.updateUserRole(editingUser!.id, formData.role);
-          setEditingUser(null);
-          break;
       }
       await loadData();
     } catch (e) { 
-      alert('Une erreur est survenue lors de l\'opération.');
+      alert('Erreur lors de l\'opération.');
     } finally { 
       setActionLoading(false); 
       setConfirmAction(null); 
@@ -124,16 +119,15 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
         ))}
       </div>
 
-      {/* Confirmation Globale */}
       {confirmAction && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-300">
           <div className="bg-white dark:bg-gray-800 w-full max-w-sm rounded-[2.5rem] p-10 shadow-2xl text-center border dark:border-gray-700">
             <div className={`w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-lg ${confirmAction.type === 'DELETE' ? 'bg-red-50 text-red-500' : 'bg-amber-50 text-amber-500'}`}>
               <AlertTriangle size={40} />
             </div>
-            <h3 className="text-xl font-black uppercase tracking-tight mb-2">{confirmAction.type === 'DELETE' ? 'Confirmer Suppression' : t.confirm}</h3>
+            <h3 className="text-xl font-black uppercase tracking-tight mb-2">{confirmAction.type === 'DELETE' ? 'Supprimer ?' : t.confirm}</h3>
             <p className="text-sm text-gray-500 dark:text-gray-400 font-medium leading-relaxed mb-8">
-              {confirmAction.type === 'DELETE' ? 'Voulez-vous vraiment supprimer définitivement ce collaborateur de votre équipe ?' : 'Souhaitez-vous valider cette action ?'}
+              {confirmAction.type === 'DELETE' ? 'Supprimer définitivement ce collaborateur ?' : 'Valider cette action ?'}
             </p>
             <div className="flex flex-col gap-3">
               <button onClick={handleAction} disabled={actionLoading} className={`w-full py-5 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2 ${confirmAction.type === 'DELETE' ? 'bg-red-600 shadow-red-500/30' : 'bg-primary-600 shadow-primary-500/30'}`}>
@@ -146,7 +140,6 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
         </div>
       )}
 
-      {/* Modal Ajout Collaborateur */}
       {showAdd && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-300">
           <div className="bg-white dark:bg-gray-800 w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl border dark:border-gray-700">
@@ -157,43 +150,26 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
             <div className="space-y-4">
               <div className="space-y-1">
                 <label className="text-[10px] font-black uppercase text-gray-400 ml-2">Email</label>
-                <input type="email" placeholder="email@domaine.com" className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl outline-none font-bold dark:text-white focus:ring-2 focus:ring-primary-500/20 transition-all" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
+                <input type="email" placeholder="Email..." className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl outline-none font-bold dark:text-white" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
               </div>
               <div className="space-y-1">
                 <label className="text-[10px] font-black uppercase text-gray-400 ml-2">Mot de passe</label>
-                <input type="password" placeholder="Min. 6 caractères" className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl outline-none font-bold dark:text-white focus:ring-2 focus:ring-primary-500/20 transition-all" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} />
+                <input type="password" placeholder="Mot de passe..." className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl outline-none font-bold dark:text-white" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} />
               </div>
               <div className="space-y-1">
-                <label className="text-[10px] font-black uppercase text-gray-400 ml-2">Code PIN (4 chiffres)</label>
-                <input type="text" placeholder="0000" maxLength={4} className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl outline-none font-bold dark:text-white focus:ring-2 focus:ring-primary-500/20 transition-all" value={formData.pin} onChange={e => setFormData({...formData, pin: e.target.value.replace(/\D/g, '')})} />
+                <label className="text-[10px] font-black uppercase text-gray-400 ml-2">Code PIN</label>
+                <input type="text" maxLength={4} className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl outline-none font-bold dark:text-white" value={formData.pin} onChange={e => setFormData({...formData, pin: e.target.value.replace(/\D/g, '')})} />
               </div>
               <div className="space-y-1">
-                <label className="text-[10px] font-black uppercase text-gray-400 ml-2">Rôle / Permissions</label>
-                <select className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl outline-none font-bold dark:text-white appearance-none cursor-pointer" value={formData.role} onChange={e => setFormData({...formData, role: e.target.value as UserRole})}>
+                <label className="text-[10px] font-black uppercase text-gray-400 ml-2">Rôle</label>
+                <select className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl outline-none font-bold dark:text-white" value={formData.role} onChange={e => setFormData({...formData, role: e.target.value as UserRole})}>
                   <option value={UserRole.SELLER}>{t.seller}</option>
                   <option value={UserRole.ADMIN}>{t.admin}</option>
                 </select>
               </div>
-              <button onClick={() => setConfirmAction({type: 'ADD'})} className="w-full py-5 bg-primary-600 text-white rounded-2xl font-black uppercase text-sm mt-4 shadow-xl shadow-primary-500/30 active:scale-95 transition-all">
+              <button onClick={() => setConfirmAction({type: 'ADD'})} className="w-full py-5 bg-primary-600 text-white rounded-2xl font-black uppercase text-sm mt-4 shadow-xl shadow-primary-500/30">
                 {t.confirm}
               </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal Changement Password */}
-      {passwordModalUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-300">
-          <div className="bg-white dark:bg-gray-800 w-full max-w-sm rounded-[2.5rem] p-10 shadow-2xl text-center border dark:border-gray-700">
-            <div className="w-16 h-16 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center mx-auto mb-6"><Key size={32} /></div>
-            <h3 className="text-xl font-black uppercase mb-4">Nouveau mot de passe</h3>
-            <div className="space-y-4 mb-8">
-              <input type="text" placeholder="Entrez le nouveau MDP" className="w-full p-5 bg-gray-50 dark:bg-gray-900 rounded-2xl outline-none font-black text-center text-lg dark:text-white" value={resetPwdValue} onChange={e => setResetPwdValue(e.target.value)} />
-            </div>
-            <div className="flex flex-col gap-3">
-              <button onClick={() => setConfirmAction({type: 'PWD'})} className="w-full py-5 bg-amber-600 text-white rounded-2xl font-black text-sm uppercase shadow-xl shadow-amber-500/20 active:scale-95">Valider</button>
-              <button onClick={() => setPasswordModalUser(null)} className="w-full py-4 font-black uppercase text-xs text-gray-400">Annuler</button>
             </div>
           </div>
         </div>
