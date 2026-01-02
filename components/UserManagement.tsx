@@ -34,6 +34,8 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
     try {
       const uData = await supabase.getUsers(user.agency_id, user.role);
       setUsers(isSuper ? uData : uData.filter(u => u.role !== UserRole.SUPER_ADMIN));
+    } catch (error) {
+      console.error("Erreur lors du chargement des utilisateurs:", error);
     } finally { setLoading(false); }
   };
 
@@ -122,7 +124,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
             </div>
             <h3 className="text-xl font-black uppercase tracking-tight mb-2">{confirmAction.type === 'DELETE' ? 'Confirmer Suppression' : t.confirm}</h3>
             <p className="text-sm text-gray-500 dark:text-gray-400 font-medium leading-relaxed mb-8">
-              {confirmAction.type === 'DELETE' ? 'Voulez-vous vraiment supprimer définitivement ce collaborateur ?' : 'Souhaitez-vous valider cette action ?'}
+              {confirmAction.type === 'DELETE' ? 'Voulez-vous vraiment supprimer définitivement ce collaborateur de votre équipe ?' : 'Souhaitez-vous valider cette action ?'}
             </p>
             <div className="flex flex-col gap-3">
               <button onClick={handleAction} disabled={actionLoading} className={`w-full py-5 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2 ${confirmAction.type === 'DELETE' ? 'bg-red-600 shadow-red-500/30' : 'bg-primary-600 shadow-primary-500/30'}`}>
@@ -145,15 +147,15 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
             <div className="space-y-4">
               <div className="space-y-1">
                 <label className="text-[10px] font-black uppercase text-gray-400 ml-2">Email</label>
-                <input type="email" placeholder="email@domaine.com" className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl outline-none font-bold dark:text-white" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
+                <input type="email" placeholder="email@domaine.com" className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl outline-none font-bold dark:text-white focus:ring-2 focus:ring-primary-500/20 transition-all" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
               </div>
               <div className="space-y-1">
                 <label className="text-[10px] font-black uppercase text-gray-400 ml-2">Mot de passe</label>
-                <input type="password" placeholder="Min. 6 caractères" className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl outline-none font-bold dark:text-white" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} />
+                <input type="password" placeholder="Min. 6 caractères" className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl outline-none font-bold dark:text-white focus:ring-2 focus:ring-primary-500/20 transition-all" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} />
               </div>
               <div className="space-y-1">
                 <label className="text-[10px] font-black uppercase text-gray-400 ml-2">Code PIN (4 chiffres)</label>
-                <input type="text" placeholder="0000" maxLength={4} className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl outline-none font-bold dark:text-white" value={formData.pin} onChange={e => setFormData({...formData, pin: e.target.value.replace(/\D/g, '')})} />
+                <input type="text" placeholder="0000" maxLength={4} className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl outline-none font-bold dark:text-white focus:ring-2 focus:ring-primary-500/20 transition-all" value={formData.pin} onChange={e => setFormData({...formData, pin: e.target.value.replace(/\D/g, '')})} />
               </div>
               <div className="space-y-1">
                 <label className="text-[10px] font-black uppercase text-gray-400 ml-2">Rôle / Permissions</label>
