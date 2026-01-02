@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Search, FileUp, X, Loader2, Info, Layers } from 'lucide-react';
 import { supabase } from '../services/supabase';

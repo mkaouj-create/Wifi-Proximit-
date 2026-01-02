@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { LayoutDashboard, ShoppingBag, Database, ShieldCheck, ArrowRight, CheckCircle2, Wifi, Globe, Smartphone, Star, Zap, CreditCard, Loader2 } from 'lucide-react';
 import { supabase } from '../services/supabase';
@@ -65,7 +64,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLoginClick }) => {
               onClick={onLoginClick}
               className="w-full sm:w-auto px-8 py-4 bg-primary-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-primary-700 shadow-xl shadow-primary-500/30 transition-all hover:-translate-y-1"
             >
-              Démarrer l'essai gratuit
+              Commencer maintenant
             </button>
             <button 
               onClick={() => {
@@ -120,7 +119,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLoginClick }) => {
              </div>
              <h2 className="text-3xl md:text-4xl font-black tracking-tight dark:text-white leading-tight">Des forfaits adaptés à votre croissance</h2>
              <p className="text-gray-500 dark:text-gray-400 max-w-2xl mx-auto font-medium text-sm md:text-base">
-                Commencez avec notre essai gratuit de 14 jours. Choisissez ensuite le plan qui correspond à la durée de votre exploitation.
+                Choisissez le plan qui correspond à la durée de votre exploitation et profitez d'une gestion illimitée.
              </p>
           </div>
 
