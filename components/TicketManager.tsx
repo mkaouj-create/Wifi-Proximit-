@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Search, FileUp, X, Loader2, Info, Layers, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Search, FileUp, X, Loader2, Info, Layers, CheckCircle2, AlertCircle, Edit2, Tag } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import { Ticket, UserProfile, TicketStatus, UserRole, Agency } from '../types';
 import { translations, Language } from '../i18n';
@@ -13,8 +13,13 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
   const [selectedAgency, setSelectedAgency] = useState('ALL');
   const [loading, setLoading] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [isUpdatingPrice, setIsUpdatingPrice] = useState(false);
   
   const [showImport, setShowImport] = useState(false);
+  const [showPriceModal, setShowPriceModal] = useState(false);
+  const [priceTargetProfile, setPriceTargetProfile] = useState('');
+  const [newPriceValue, setNewPriceValue] = useState('');
+  
   const [importTargetAgencyId, setImportTargetAgencyId] = useState(user.agency_id);
 
   const t = translations[lang];
@@ -110,6 +115,25 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
     reader.readAsText(file);
   };
 
+  const handleUpdatePrice = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const price = parseInt(newPriceValue);
+    if (isNaN(price) || price < 0 || !priceTargetProfile) return;
+
+    setIsUpdatingPrice(true);
+    try {
+      const targetAid = isSuper ? (selectedAgency === 'ALL' ? user.agency_id : selectedAgency) : user.agency_id;
+      await supabase.updateTicketsPriceByProfile(targetAid, priceTargetProfile, price, user);
+      notify('success', `Tarifs mis à jour pour "${priceTargetProfile}".`);
+      setShowPriceModal(false);
+      loadData();
+    } catch (err) {
+      notify('error', "Échec de la mise à jour des prix.");
+    } finally {
+      setIsUpdatingPrice(false);
+    }
+  };
+
   const filtered = useMemo(() => {
     const s = search.toLowerCase();
     return tickets.filter(tk => {
@@ -121,6 +145,10 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
     });
   }, [tickets, search, filterStatus, selectedAgency]);
 
+  const uniqueProfiles = useMemo(() => {
+    return Array.from(new Set(tickets.map(t => t.profile))).sort();
+  }, [tickets]);
+
   return (
     <div className="space-y-6 pb-20 animate-in fade-in duration-500">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -130,14 +158,31 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
              {loading ? 'Mise à jour stock...' : `${filtered.length} tickets filtrés`}
           </p>
         </div>
-        {user.role !== UserRole.SELLER && (
-          <button 
-            onClick={() => setShowImport(true)} 
-            className="w-full sm:w-auto bg-primary-600 text-white px-6 py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-xl shadow-primary-500/30 active:scale-95 transition-all flex items-center justify-center gap-2"
-          >
-            <FileUp size={16}/> {t.importCsv}
-          </button>
-        )}
+        <div className="flex gap-2 w-full sm:w-auto">
+          {user.role !== UserRole.SELLER && (
+            <>
+              <button 
+                onClick={() => {
+                  if (uniqueProfiles.length > 0) {
+                    setPriceTargetProfile(uniqueProfiles[0]);
+                    setShowPriceModal(true);
+                  } else {
+                    notify('info', "Aucun profil disponible en stock.");
+                  }
+                }} 
+                className="flex-1 sm:flex-none bg-indigo-50 text-indigo-600 dark:bg-indigo-900/20 dark:text-indigo-400 px-6 py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest active:scale-95 transition-all flex items-center justify-center gap-2 border border-indigo-100 dark:border-indigo-800"
+              >
+                <Tag size={16}/> Tarifs
+              </button>
+              <button 
+                onClick={() => setShowImport(true)} 
+                className="flex-1 sm:flex-none bg-primary-600 text-white px-6 py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-xl shadow-primary-500/30 active:scale-95 transition-all flex items-center justify-center gap-2"
+              >
+                <FileUp size={16}/> {t.importCsv}
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       <div className="bg-white dark:bg-gray-800 p-3 rounded-3xl shadow-sm border dark:border-gray-700 flex flex-col md:flex-row gap-3">
@@ -205,9 +250,23 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
                     <span className="text-[10px] font-bold text-gray-500 bg-gray-100 dark:bg-gray-800 px-3 py-1.5 rounded-lg uppercase tracking-tight border border-transparent dark:border-gray-700">{tk.profile}</span>
                   </td>
                   <td className="px-6 py-4 text-right">
-                    <span className="font-black text-xs tabular-nums dark:text-white">
-                      {tk.price.toLocaleString()} <span className="text-[8px] opacity-40 uppercase font-medium">XOF</span>
-                    </span>
+                    <div className="flex items-center justify-end gap-2 group/price">
+                      <span className="font-black text-xs tabular-nums dark:text-white">
+                        {tk.price.toLocaleString()} <span className="text-[8px] opacity-40 uppercase font-medium">XOF</span>
+                      </span>
+                      {tk.status === TicketStatus.UNSOLD && user.role !== UserRole.SELLER && (
+                        <button 
+                          onClick={() => {
+                            setPriceTargetProfile(tk.profile);
+                            setNewPriceValue(tk.price.toString());
+                            setShowPriceModal(true);
+                          }}
+                          className="p-1.5 text-gray-300 hover:text-primary-500 transition-all opacity-0 group-hover:opacity-100"
+                        >
+                          <Edit2 size={12} />
+                        </button>
+                      )}
+                    </div>
                   </td>
                   <td className="px-6 py-4 text-center">
                     <div className="flex justify-center">
@@ -236,6 +295,72 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
         </div>
       </div>
 
+      {/* Modal: Bulk Price Update */}
+      {showPriceModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-300">
+          <div className="bg-white/95 dark:bg-gray-800/95 backdrop-blur-xl w-full max-w-sm rounded-[3rem] p-10 shadow-2xl animate-in zoom-in duration-300 border border-white/20 dark:border-gray-700/50">
+            <div className="flex justify-between items-center mb-8">
+              <h3 className="text-2xl font-black uppercase tracking-tight dark:text-white">Prix Profil</h3>
+              <button onClick={() => setShowPriceModal(false)} className="p-2 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-400 hover:text-red-500 transition-all active:scale-90">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="bg-indigo-50 dark:bg-indigo-900/10 p-5 rounded-[2rem] mb-8 flex gap-4 border border-indigo-100 dark:border-indigo-800/50 text-left">
+              <div className="w-10 h-10 bg-indigo-100 dark:bg-indigo-800/20 text-indigo-600 rounded-2xl flex items-center justify-center shrink-0">
+                <Tag size={22} />
+              </div>
+              <div className="space-y-1">
+                <p className="text-[10px] text-indigo-700 dark:text-indigo-400 font-black uppercase tracking-widest">Modification tarifaire</p>
+                <p className="text-[10px] text-gray-500 dark:text-gray-400 font-medium leading-relaxed">Le nouveau prix sera appliqué à tous les tickets invendus du profil sélectionné.</p>
+              </div>
+            </div>
+
+            <form onSubmit={handleUpdatePrice} className="space-y-6">
+              <div className="space-y-2">
+                <label className="text-[9px] font-black text-gray-400 uppercase ml-3 tracking-widest">Profil Cible</label>
+                <select 
+                  className="w-full p-5 bg-gray-50 dark:bg-gray-900 rounded-2xl outline-none font-black text-xs uppercase tracking-tight border-2 border-transparent focus:border-primary-500/30 transition-all appearance-none cursor-pointer dark:text-white"
+                  value={priceTargetProfile}
+                  onChange={(e) => {
+                    setPriceTargetProfile(e.target.value);
+                    const sample = tickets.find(t => t.profile === e.target.value);
+                    if (sample) setNewPriceValue(sample.price.toString());
+                  }}
+                >
+                  {uniqueProfiles.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[9px] font-black text-gray-400 uppercase ml-3 tracking-widest">Nouveau Tarif (XOF)</label>
+                <input 
+                  type="number" 
+                  autoFocus
+                  className="w-full p-5 bg-gray-50 dark:bg-gray-900 rounded-2xl outline-none font-black text-2xl text-center tracking-tight border-2 border-transparent focus:border-primary-500/30 transition-all dark:text-white"
+                  value={newPriceValue}
+                  onChange={(e) => setNewPriceValue(e.target.value)}
+                  placeholder="0"
+                  required
+                />
+              </div>
+
+              <div className="flex gap-4 pt-4">
+                <button type="button" onClick={() => setShowPriceModal(false)} className="flex-1 py-5 bg-gray-100 dark:bg-gray-700 rounded-2xl font-black text-[10px] uppercase tracking-widest text-gray-500">Annuler</button>
+                <button 
+                  type="submit" 
+                  disabled={isUpdatingPrice}
+                  className="flex-1 py-5 bg-indigo-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-indigo-500/30 flex justify-center items-center gap-2"
+                >
+                  {isUpdatingPrice ? <Loader2 className="animate-spin w-4 h-4" /> : <CheckCircle2 size={16} />}
+                  Mettre à jour
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {showImport && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-300">
           <div className="bg-white/95 dark:bg-gray-800/95 backdrop-blur-xl w-full max-w-sm rounded-[3rem] p-10 shadow-2xl animate-in zoom-in duration-300 border border-white/20 dark:border-gray-700/50">
@@ -246,7 +371,7 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
               </button>
             </div>
             
-            <div className="bg-amber-50 dark:bg-amber-900/10 p-5 rounded-[2rem] mb-8 flex gap-4 border border-amber-100 dark:border-amber-800/50">
+            <div className="bg-amber-50 dark:bg-amber-900/10 p-5 rounded-[2rem] mb-8 flex gap-4 border border-amber-100 dark:border-amber-800/50 text-left">
               <div className="w-10 h-10 bg-amber-100 dark:bg-amber-800/20 text-amber-600 rounded-2xl flex items-center justify-center shrink-0">
                 <Info size={22} />
               </div>

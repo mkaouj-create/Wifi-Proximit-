@@ -185,6 +185,17 @@ class SupabaseService {
     return { success: toInsert.length, cost };
   }
 
+  async updateTicketsPriceByProfile(aid: string, profile: string, newPrice: number, actor: UserProfile) {
+    const { error } = await client.from('tickets')
+      .update({ price: newPrice })
+      .eq('agency_id', aid)
+      .eq('profile', profile)
+      .eq('status', TicketStatus.UNSOLD);
+    
+    if (error) throw error;
+    await this.log(actor, 'TICKET_UPDATE', `Mise à jour tarif profil "${profile}" : ${newPrice} XOF`);
+  }
+
   async getStats(aid: string, role: UserRole) {
     if (!this.isConfigured()) return { revenue: 0, soldCount: 0, stockCount: 0, userCount: 0, agencyCount: 0, currency: 'XOF', credits: 0 };
     const matchQuery = role === UserRole.SUPER_ADMIN ? {} : { agency_id: aid };
