@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { Search, User, Download, Trash2, AlertTriangle, X, Tag, Wifi, Banknote, Clock, Phone, Share2, Copy, Check, Calendar } from 'lucide-react';
 import { supabase } from '../services/supabase';
@@ -42,7 +43,8 @@ const SalesHistory: React.FC<SalesHistoryProps> = ({ user, lang }) => {
   const handleCancelSale = async () => {
     if (!saleToCancel) return;
     try {
-      await supabase.cancelSale(saleToCancel.id);
+      // Pass user as actor for logging
+      await supabase.cancelSale(saleToCancel.id, user);
       setSaleToCancel(null);
       loadData();
     } catch (err) {
