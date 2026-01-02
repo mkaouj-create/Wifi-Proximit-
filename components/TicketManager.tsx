@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Search, FileUp, X, Loader2, Info, Layers, CheckCircle2, AlertCircle } from 'lucide-react';
 import { supabase } from '../services/supabase';
@@ -31,15 +30,15 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
       
       if (isSuper && agenciesData) {
         setAgencies(agenciesData);
-        // Si l'agence cible n'est pas encore définie, on prend celle de l'utilisateur par défaut
+        // On ne remplace l'agence cible que si elle n'est pas déjà choisie ou invalide
         if (!importTargetAgencyId) setImportTargetAgencyId(user.agency_id);
       }
     } catch (err) {
-      notify('error', "Échec de la récupération des données stockées.");
+      notify('error', "Impossible de charger l'inventaire.");
     } finally {
       setLoading(false);
     }
-  }, [user.id, user.agency_id, user.role, isSuper, notify]);
+  }, [user.id, user.agency_id, user.role, isSuper, notify, importTargetAgencyId]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -53,30 +52,32 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
     reader.onload = async (ev) => {
       try {
         const text = ev.target?.result as string;
-        if (!text || text.trim().length === 0) throw new Error("Le fichier sélectionné est vide.");
+        if (!text || text.trim().length === 0) throw new Error("Le fichier est vide.");
 
+        // Nettoyage des lignes et gestion intelligente du délimiteur
         const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
-        if (lines.length === 0) throw new Error("Format de fichier non reconnu ou corrompu.");
+        if (lines.length === 0) throw new Error("Format CSV non supporté.");
 
         const firstLine = lines[0];
-        // Détection intelligente du délimiteur
         const delimiter = firstLine.includes(';') ? ';' : firstLine.includes(',') ? ',' : '\t';
         
         const headers = lines[0].toLowerCase().split(delimiter).map(h => h.trim().replace(/^["']|["']$/g, ''));
         
-        // Mapping flexible des colonnes
+        // Mapping flexible pour supporter Mikhmon et les exports standards
         const idx = {
-          user: headers.findIndex(h => h.includes('user') || h === 'login' || h === 'id' || h === 'identifiant' || h === 'username'),
+          user: headers.findIndex(h => h.includes('user') || h === 'login' || h === 'id' || h === 'identifiant' || h === 'username' || h === 'name'),
           pass: headers.findIndex(h => h.includes('pass') || h === 'pwd' || h === 'password' || h === 'mot de passe'),
-          prof: headers.findIndex(h => h.includes('prof') || h === 'forfait' || h === 'profile' || h === 'limit'),
-          price: headers.findIndex(h => h.includes('price') || h === 'prix' || h === 'tarif' || h === 'amount')
+          prof: headers.findIndex(h => h.includes('prof') || h === 'forfait' || h === 'profile' || h === 'plan' || h === 'limit'),
+          price: headers.findIndex(h => h.includes('price') || h === 'prix' || h === 'tarif' || h === 'amount' || h === 'cost')
         };
 
         const hasHeader = idx.user !== -1;
         const dataLines = hasHeader ? lines.slice(1) : lines;
         
         const rows = dataLines.map(line => {
-          const parts = line.split(delimiter).map(v => v.replace(/^["']|["']$/g, '').trim());
+          // Gestion des champs entre guillemets pour éviter les erreurs de split
+          const parts = line.split(new RegExp(`${delimiter}(?=(?:(?:[^"]*"){2})*[^"]*$)`))
+                            .map(v => v.replace(/^["']|["']$/g, '').trim());
           
           const username = hasHeader ? parts[idx.user] : parts[0];
           if (!username) return null;
@@ -89,16 +90,16 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
           };
         }).filter((r): r is any => r !== null && r.username.length > 0);
 
-        if (rows.length === 0) throw new Error("Aucun ticket valide trouvé après analyse du CSV.");
+        if (rows.length === 0) throw new Error("Aucune donnée valide n'a été extraite.");
 
         const targetAid = isSuper ? importTargetAgencyId : user.agency_id;
         const res = await supabase.importTickets(rows, user.id, targetAid);
         
-        notify('success', `${res.success} tickets importés avec succès. Débit : ${res.cost.toFixed(2)} crédits.`);
+        notify('success', `${res.success} tickets ajoutés. Débit: ${res.cost.toFixed(2)} crédits.`);
         setShowImport(false);
         loadData();
       } catch (err: any) {
-        notify('error', err.message || "Une erreur est survenue lors de l'importation.");
+        notify('error', err.message || "Erreur lors de l'importation.");
       } finally {
         setIsImporting(false);
         if (e.target) e.target.value = '';
@@ -106,7 +107,7 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
     };
     
     reader.onerror = () => {
-      notify('error', "Impossible de lire le fichier CSV.");
+      notify('error', "Échec de lecture du fichier.");
       setIsImporting(false);
     };
     
@@ -114,9 +115,10 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
   };
 
   const filtered = useMemo(() => {
+    const s = search.toLowerCase();
     return tickets.filter(tk => {
-      const matchSearch = tk.username.toLowerCase().includes(search.toLowerCase()) || 
-                          tk.profile.toLowerCase().includes(search.toLowerCase());
+      const matchSearch = tk.username.toLowerCase().includes(s) || 
+                          tk.profile.toLowerCase().includes(s);
       const matchStatus = filterStatus === 'ALL' || tk.status === filterStatus;
       const matchAgency = selectedAgency === 'ALL' || tk.agency_id === selectedAgency;
       return matchSearch && matchStatus && matchAgency;
@@ -129,7 +131,7 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
         <div>
           <h2 className="text-2xl md:text-3xl font-black dark:text-white uppercase tracking-tight">{t.inventory}</h2>
           <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest mt-1">
-             {loading ? 'Chargement des données...' : `${filtered.length} tickets en stock pour les critères sélectionnés`}
+             {loading ? 'Calcul du stock...' : `${filtered.length} tickets en réserve`}
           </p>
         </div>
         {user.role !== UserRole.SELLER && (
@@ -160,7 +162,7 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
               value={selectedAgency} 
               onChange={e => setSelectedAgency(e.target.value)}
             >
-              <option value="ALL">Toutes les agences</option>
+              <option value="ALL">Agences (Tous)</option>
               {agencies.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
             </select>
           )}
@@ -169,7 +171,7 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
             value={filterStatus} 
             onChange={e => setFilterStatus(e.target.value as any)}
           >
-            <option value="ALL">Tous les états</option>
+            <option value="ALL">États (Tous)</option>
             <option value="UNSOLD">{t.unsold}</option>
             <option value="SOLD">{t.sold}</option>
           </select>
@@ -180,7 +182,7 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
         {loading && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/50 dark:bg-gray-800/50 backdrop-blur-[2px] z-10">
             <Loader2 className="animate-spin text-primary-600 mb-2" size={32} />
-            <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Synchronisation...</span>
+            <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Chargement...</span>
           </div>
         )}
         
@@ -188,10 +190,10 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
           <table className="w-full text-left">
             <thead className="bg-gray-50/50 dark:bg-gray-700/50 text-[10px] font-black uppercase tracking-widest text-gray-400">
               <tr>
-                <th className="px-6 py-5">Identifiant WiFi</th>
-                <th className="px-6 py-5">Forfait Client</th>
-                <th className="px-6 py-5 text-right">Tarif Unitaire</th>
-                <th className="px-6 py-5 text-center">État Stock</th>
+                <th className="px-6 py-5">Code Accès</th>
+                <th className="px-6 py-5">Type Forfait</th>
+                <th className="px-6 py-5 text-right">Tarif</th>
+                <th className="px-6 py-5 text-center">État</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
@@ -231,8 +233,8 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
           {!loading && filtered.length === 0 && (
             <div className="py-32 flex flex-col items-center justify-center text-gray-400">
               <Layers className="w-16 h-16 opacity-10 mb-4" />
-              <p className="font-black uppercase text-[10px] tracking-[0.3em]">Aucune donnée à afficher</p>
-              <button onClick={loadData} className="mt-4 text-[9px] font-bold text-primary-500 underline">Rafraîchir l'inventaire</button>
+              <p className="font-black uppercase text-[10px] tracking-[0.3em]">Aucun ticket en stock</p>
+              <button onClick={loadData} className="mt-4 text-[9px] font-bold text-primary-500 underline">Synchroniser l'inventaire</button>
             </div>
           )}
         </div>
@@ -253,7 +255,7 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
                 <Info size={22} />
               </div>
               <div className="space-y-1">
-                <p className="text-[10px] text-amber-700 dark:text-amber-500 font-black uppercase tracking-widest">Informations Tarifs</p>
+                <p className="text-[10px] text-amber-700 dark:text-amber-500 font-black uppercase tracking-widest">Coût d'importation</p>
                 <p className="text-[10px] text-gray-500 dark:text-gray-400 font-medium leading-relaxed">{t.importRuleInfo}</p>
               </div>
             </div>
@@ -261,9 +263,9 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
             <div className="space-y-6">
               {isSuper && (
                 <div className="space-y-2">
-                  <label className="text-[9px] font-black text-gray-400 uppercase ml-3 tracking-widest">Agence de destination</label>
+                  <label className="text-[9px] font-black text-gray-400 uppercase ml-3 tracking-widest">Cible Agence</label>
                   <select 
-                    className="w-full p-5 bg-gray-50 dark:bg-gray-900 rounded-2xl outline-none font-black text-xs uppercase tracking-tight border-2 border-transparent focus:border-primary-500/30 transition-all appearance-none cursor-pointer dark:text-white"
+                    className="w-full p-5 bg-gray-50 dark:bg-gray-900 rounded-2xl outline-none font-black text-xs uppercase tracking-tight border-2 border-transparent focus:border-primary-500/30 transition-all appearance-none cursor-pointer dark:text-white shadow-inner"
                     value={importTargetAgencyId}
                     onChange={(e) => setImportTargetAgencyId(e.target.value)}
                   >
@@ -281,15 +283,15 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
                   {isImporting ? (
                     <div className="flex flex-col items-center gap-3">
                       <Loader2 size={40} className="animate-spin text-primary-600"/>
-                      <p className="font-black text-[10px] text-primary-600 uppercase tracking-widest animate-pulse">Analyse en cours...</p>
+                      <p className="font-black text-[10px] text-primary-600 uppercase tracking-widest animate-pulse">Analyse CSV...</p>
                     </div>
                   ) : (
                     <div className="flex flex-col items-center gap-3">
                       <div className="w-14 h-14 bg-primary-50 dark:bg-primary-900/30 text-primary-600 rounded-2xl flex items-center justify-center mb-1">
                          <FileUp size={30} />
                       </div>
-                      <p className="font-black text-[11px] text-gray-600 dark:text-gray-300 uppercase tracking-widest">Sélectionner CSV</p>
-                      <p className="text-[9px] text-gray-400 font-medium">Glisser-déposer ou cliquer</p>
+                      <p className="font-black text-[11px] text-gray-600 dark:text-gray-300 uppercase tracking-widest">Choisir un fichier</p>
+                      <p className="text-[9px] text-gray-400 font-medium">Format supporté: CSV Mikhmon</p>
                     </div>
                   )}
                   <input type="file" accept=".csv" onChange={handleImport} className="hidden" disabled={isImporting} />

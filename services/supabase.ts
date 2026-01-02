@@ -1,4 +1,3 @@
-
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { 
   UserRole, 
@@ -49,10 +48,13 @@ class SupabaseService {
     return new Date(agency.subscription_end).getTime() > Date.now();
   }
 
+  /**
+   * Enregistre une action dans le journal d'audit de manière non-bloquante.
+   */
   private async log(user: Partial<UserProfile>, action: string, details: string): Promise<void> {
     if (!this.isConfigured()) return;
     try {
-      // Insertion asynchrone sans bloquer l'appelant
+      // On ne 'await' pas l'insertion pour ne pas ralentir l'UX
       client.from('logs').insert({
         user_id: user.id, 
         user_name: user.display_name || user.email || 'Système', 
@@ -60,11 +62,11 @@ class SupabaseService {
         action, 
         details, 
         created_at: new Date().toISOString()
-      }).then(({error}) => {
-        if(error) console.warn("Audit log storage failed:", error.message);
+      }).then(({ error }) => {
+        if (error) console.error("Échec de l'enregistrement du log d'audit:", error.message);
       });
     } catch (e) {
-      console.error("Audit log execution error:", e);
+      console.warn("Audit Log silent failure:", e);
     }
   }
 
@@ -76,10 +78,10 @@ class SupabaseService {
       
       localStorage.setItem('wifi_pro_session', JSON.stringify({ email, password }));
       const user = data as UserProfile;
-      await this.log(user, 'LOGIN', 'Session ouverte via authentification directe');
+      await this.log(user, 'LOGIN', 'Authentification réussie');
       return user;
     } catch (err) {
-      console.error("SignIn error:", err);
+      console.error("Erreur d'authentification:", err);
       return null;
     }
   }
@@ -98,7 +100,7 @@ class SupabaseService {
 
   async signOut(user: UserProfile): Promise<void> { 
     localStorage.removeItem('wifi_pro_session');
-    await this.log(user, 'LOGOUT', 'Session utilisateur fermée'); 
+    await this.log(user, 'LOGOUT', 'Déconnexion utilisateur'); 
   }
 
   async verifyPin(uid: string, pin: string): Promise<boolean> { 
@@ -111,8 +113,10 @@ class SupabaseService {
 
   async getAgencies(): Promise<Agency[]> { 
     if (!this.isConfigured()) return [];
-    const { data } = await client.from('agencies').select('*').order('name'); 
-    return (data as Agency[]) || [];
+    try {
+      const { data } = await client.from('agencies').select('*').order('name'); 
+      return (data as Agency[]) || [];
+    } catch { return []; }
   }
 
   async getAgency(id: string): Promise<Agency> { 
@@ -123,13 +127,13 @@ class SupabaseService {
 
   async createAgency(name: string, actor: UserProfile): Promise<Agency> {
     const now = new Date();
-    // Par défaut, toute nouvelle agence a 14 jours de validité (Trial caché)
+    // Licence initiale Standard de 14 jours
     const subscriptionEnd = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000); 
     
     const { data, error } = await client.from('agencies').insert({
       name,
       status: 'active',
-      credits_balance: 2.5, // 50 tickets offerts (50 / 20 = 2.5 crédits)
+      credits_balance: 2.5, // 50 tickets offerts (2.5 * 20)
       plan_name: 'Standard',
       subscription_start: now.toISOString(),
       subscription_end: subscriptionEnd.toISOString(),
@@ -140,7 +144,7 @@ class SupabaseService {
     }).select().single();
     
     if (error) throw error;
-    await this.log(actor, 'AGENCY_CREATE', `Création agence : ${name}`);
+    await this.log(actor, 'AGENCY_CREATE', `Nouvelle agence créée: ${name}`);
     return data as Agency;
   }
 
@@ -153,13 +157,13 @@ class SupabaseService {
     const isUnlimited = agency.plan_name === 'UNLIMITED';
     
     if (agency.credits_balance < cost && !isUnlimited) {
-      throw new Error(`Crédits insuffisants (Requis: ${cost.toFixed(2)}, Dispo: ${agency.credits_balance.toFixed(2)})`);
+      throw new Error(`Crédits insuffisants. Requis: ${cost.toFixed(2)}, Disponible: ${agency.credits_balance.toFixed(2)}`);
     }
 
     const toInsert = ticketsData.map(t => ({
       username: String(t.username || '').trim(),
       password: String(t.password || t.username || '').trim(),
-      profile: String(t.profile || 'Default').trim(),
+      profile: String(t.profile || 'Standard').trim(),
       time_limit: String(t.time_limit || 'N/A').trim(),
       price: Math.max(0, Number.parseInt(String(t.price)) || 0),
       agency_id: aid,
@@ -167,18 +171,17 @@ class SupabaseService {
       status: TicketStatus.UNSOLD
     })).filter(t => t.username !== '');
 
-    if (toInsert.length === 0) throw new Error('Aucun ticket valide trouvé.');
+    if (toInsert.length === 0) throw new Error('Aucun ticket valide trouvé dans le fichier.');
 
-    // Transaction batchée
     const { error: insertErr } = await client.from('tickets').insert(toInsert);
-    if (insertErr) throw new Error(`Erreur SQL: ${insertErr.message}`);
+    if (insertErr) throw new Error(`Erreur lors de l'insertion SQL: ${insertErr.message}`);
 
     if (!isUnlimited && cost > 0) {
       const newBalance = Number.parseFloat((agency.credits_balance - cost).toFixed(4));
       await client.from('agencies').update({ credits_balance: newBalance }).eq('id', aid);
     }
 
-    await this.log({id: uid, agency_id: aid}, 'TICKET_IMPORT', `Importation réussie : ${toInsert.length} tickets (Coût : ${cost.toFixed(2)} crédits)`);
+    await this.log({id: uid, agency_id: aid}, 'TICKET_IMPORT', `Importation massive: ${toInsert.length} tickets ajoutés (Coût: ${cost.toFixed(2)})`);
     return { success: toInsert.length, cost };
   }
 
@@ -208,13 +211,12 @@ class SupabaseService {
         credits: totalCredits
       };
     } catch (err) {
-      console.error("Stats fetch error:", err);
+      console.error("Stats fetching failure:", err);
       return { revenue: 0, soldCount: 0, stockCount: 0, userCount: 0, agencyCount: 0, currency: 'XOF', credits: 0 };
     }
   }
 
   async sellTicket(tid: string, sid: string, aid: string, phone?: string): Promise<Sale | null> {
-    // Vérification atomique de disponibilité
     const { data: tk } = await client.from('tickets')
       .select('*')
       .eq('id', tid)
@@ -224,7 +226,6 @@ class SupabaseService {
     if (!tk) return null;
     
     const now = new Date().toISOString();
-    // Mise à jour sécurisée (Optimistic Lock)
     const { error: updateError } = await client.from('tickets')
       .update({ status: TicketStatus.SOLD, sold_by: sid, sold_at: now })
       .eq('id', tid)
@@ -237,47 +238,55 @@ class SupabaseService {
     }).select().single();
 
     if (saleError) {
-      // Rollback manuel du statut ticket en cas d'erreur insertion vente
+      // Rollback manuel du statut
       await client.from('tickets').update({ status: TicketStatus.UNSOLD, sold_by: null, sold_at: null }).eq('id', tid);
       throw saleError;
     }
 
-    await this.log({id: sid, agency_id: aid}, 'SALE', `Vente effectuée : ${tk.username} (${tk.price} XOF)`);
+    await this.log({id: sid, agency_id: aid}, 'SALE', `Vente ticket: ${tk.username} pour ${tk.price} XOF`);
     return sale as Sale;
   }
 
   async getTickets(aid: string, role: UserRole): Promise<Ticket[]> {
-    let q = client.from('tickets').select('*').order('created_at', { ascending: false });
-    if (role !== UserRole.SUPER_ADMIN) q = q.eq('agency_id', aid);
-    const { data } = await q;
-    return (data as Ticket[]) || [];
+    try {
+      let q = client.from('tickets').select('*').order('created_at', { ascending: false });
+      if (role !== UserRole.SUPER_ADMIN) q = q.eq('agency_id', aid);
+      const { data } = await q;
+      return (data as Ticket[]) || [];
+    } catch { return []; }
   }
 
   async getSales(aid: string, role: UserRole): Promise<Sale[]> {
-    let q = client.from('sales').select('*, profiles:seller_id(display_name), tickets:ticket_id(username, profile, time_limit)');
-    if (role !== UserRole.SUPER_ADMIN) q = q.eq('agency_id', aid);
-    const { data } = await q.order('sold_at', { ascending: false });
-    return (data || []).map((s: any) => ({ 
-      ...s, 
-      seller_name: s.profiles?.display_name, 
-      ticket_username: s.tickets?.username, 
-      ticket_profile: s.tickets?.profile, 
-      ticket_time_limit: s.tickets?.time_limit 
-    })) as Sale[];
+    try {
+      let q = client.from('sales').select('*, profiles:seller_id(display_name), tickets:ticket_id(username, profile, time_limit)');
+      if (role !== UserRole.SUPER_ADMIN) q = q.eq('agency_id', aid);
+      const { data } = await q.order('sold_at', { ascending: false });
+      return (data || []).map((s: any) => ({ 
+        ...s, 
+        seller_name: s.profiles?.display_name, 
+        ticket_username: s.tickets?.username, 
+        ticket_profile: s.tickets?.profile, 
+        ticket_time_limit: s.tickets?.time_limit 
+      })) as Sale[];
+    } catch { return []; }
   }
 
   async getUsers(aid: string, role: UserRole): Promise<UserProfile[]> {
-    let q = client.from('profiles').select('*');
-    if (role !== UserRole.SUPER_ADMIN) q = q.eq('agency_id', aid);
-    const { data } = await q;
-    return (data as UserProfile[]) || [];
+    try {
+      let q = client.from('profiles').select('*');
+      if (role !== UserRole.SUPER_ADMIN) q = q.eq('agency_id', aid);
+      const { data } = await q;
+      return (data as UserProfile[]) || [];
+    } catch { return []; }
   }
 
   async getLogs(aid: string, role: UserRole): Promise<ActivityLog[]> {
-    let q = client.from('logs').select('*').order('created_at', { ascending: false }).limit(100);
-    if (role !== UserRole.SUPER_ADMIN) q = q.eq('agency_id', aid);
-    const { data } = await q;
-    return (data as ActivityLog[]) || [];
+    try {
+      let q = client.from('logs').select('*').order('created_at', { ascending: false }).limit(100);
+      if (role !== UserRole.SUPER_ADMIN) q = q.eq('agency_id', aid);
+      const { data } = await q;
+      return (data as ActivityLog[]) || [];
+    } catch { return []; }
   }
 
   async addUser(u: any) { 
@@ -296,27 +305,27 @@ class SupabaseService {
   async updatePassword(id: string, password: string, actor: UserProfile) { 
     const { error } = await client.from('profiles').update({ password }).eq('id', id);
     if (error) return false;
-    await this.log(actor, 'PASSWORD_CHANGE', `Modification mot de passe utilisateur ID: ${id}`);
+    await this.log(actor, 'PASSWORD_CHANGE', `Mot de passe utilisateur ID ${id} modifié`);
     return true; 
   }
   
   async updateAgency(id: string, name: string, settings: any, actor: UserProfile) { 
     const { error } = await client.from('agencies').update({ name, settings }).eq('id', id);
     if (error) throw error;
-    await this.log(actor, 'AGENCY_UPDATE', `Mise à jour paramètres agence : ${name}`);
+    await this.log(actor, 'AGENCY_UPDATE', `Paramètres agence "${name}" mis à jour`);
   }
   
   async deleteAgency(id: string, actor: UserProfile) { 
     const { error } = await client.from('agencies').delete().eq('id', id); 
     if (error) throw error;
-    await this.log(actor, 'AGENCY_DELETE', `Suppression agence ID: ${id}`);
+    await this.log(actor, 'AGENCY_DELETE', `Agence ID ${id} supprimée`);
   }
   
   async addCredits(aid: string, amount: number, actorId: string, desc: string) {
     const { data: ag } = await client.from('agencies').select('credits_balance').eq('id', aid).single();
     const newBalance = Number.parseFloat(((ag?.credits_balance || 0) + amount).toFixed(4));
     await client.from('agencies').update({ credits_balance: newBalance }).eq('id', aid);
-    await this.log({id: actorId}, 'CREDIT_RECHARGE', `Recharge +${amount} crédits (Agence ID: ${aid})`);
+    await this.log({id: actorId}, 'CREDIT_RECHARGE', `Ajout de ${amount} crédits à l'agence ID ${aid}`);
   }
   
   async getSubscriptionPlans() { 
@@ -329,21 +338,19 @@ class SupabaseService {
     if (existing) return false;
     const { error } = await client.from('profiles').update({ email }).eq('id', id);
     if (error) return false;
-    await this.log(actor, 'USER_UPDATE', `Email utilisateur modifié : ${email}`);
+    await this.log(actor, 'USER_UPDATE', `Email utilisateur changé pour: ${email}`);
     return true;
   }
   
   async cancelSale(saleId: string, actor?: UserProfile) {
     const { data: sale } = await client.from('sales').select('*').eq('id', saleId).single();
-    if (!sale) throw new Error('Vente introuvable');
+    if (!sale) throw new Error('Vente non trouvée');
     
-    // Rétablir ticket
     await client.from('tickets').update({ status: TicketStatus.UNSOLD, sold_by: null, sold_at: null }).eq('id', sale.ticket_id);
-    // Supprimer vente
     await client.from('sales').delete().eq('id', saleId);
     
     if (actor) { 
-      await this.log(actor, 'SALE_CANCEL', `Vente annulée pour le ticket ${sale.ticket_id} (Remis en stock)`); 
+      await this.log(actor, 'SALE_CANCEL', `Vente ID ${saleId} annulée (Ticket ${sale.ticket_id} remis en stock)`); 
     }
   }
   
@@ -351,22 +358,22 @@ class SupabaseService {
     const { data: agency } = await client.from('agencies').select('settings').eq('id', id).single();
     const settings = { ...(agency?.settings || {}), modules };
     await client.from('agencies').update({ settings }).eq('id', id);
-    await this.log(actor, 'AGENCY_MODULES', `Modules modifiés pour l'agence ID: ${id}`);
+    await this.log(actor, 'AGENCY_MODULES', `Modules modifiés pour l'agence ID ${id}`);
   }
   
   async updateSubscriptionPlan(plan: SubscriptionPlan, actor: UserProfile) { 
     await client.from('subscription_plans').upsert(plan); 
-    await this.log(actor, 'PLAN_UPDATE', `Plan tarifaire mis à jour : ${plan.name}`);
+    await this.log(actor, 'PLAN_UPDATE', `Plan "${plan.name}" mis à jour`);
   }
   
   async deleteSubscriptionPlan(id: string, actor: UserProfile) { 
     await client.from('subscription_plans').delete().eq('id', id); 
-    await this.log(actor, 'PLAN_DELETE', `Plan tarifaire supprimé ID: ${id}`);
+    await this.log(actor, 'PLAN_DELETE', `Plan ID ${id} supprimé`);
   }
   
   async setAgencyStatus(id: string, status: AgencyStatus, actor: UserProfile) { 
     await client.from('agencies').update({ status }).eq('id', id); 
-    await this.log(actor, 'AGENCY_STATUS', `Statut agence modifié -> ${status} (ID: ${id})`);
+    await this.log(actor, 'AGENCY_STATUS', `Statut agence ID ${id} changé en: ${status}`);
   }
   
   async updateSubscription(aid: string, planName: string, months: number, actor: UserProfile) {
@@ -379,7 +386,7 @@ class SupabaseService {
     }).eq('id', aid);
     
     if(error) throw error;
-    await this.log(actor, 'AGENCY_SUBSCRIPTION', `Licence ${planName} activée pour ${months} mois (Agence ID: ${aid})`);
+    await this.log(actor, 'AGENCY_SUBSCRIPTION', `Licence ${planName} (${months} mois) activée pour l'agence ID ${aid}`);
   }
 }
 
