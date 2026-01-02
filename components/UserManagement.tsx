@@ -181,7 +181,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
             </div>
             <div className="flex flex-col gap-3">
               <button onClick={() => setConfirmAction({type: 'PWD'})} className="w-full py-5 bg-amber-600 text-white rounded-2xl font-black text-sm uppercase shadow-xl shadow-amber-500/20 active:scale-95">Valider</button>
-              <button onClick={() => setPasswordModalUser(null)} className="w-full py-4 font-black uppercase text-xs text-gray-400">Annuler</button>
+              <button onClick={() => setPasswordModalUser(null)} className="w-full py-4 font-black uppercase text-xs text-gray-400 active:scale-95">Annuler</button>
             </div>
           </div>
         </div>
