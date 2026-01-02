@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Search, FileUp, X, Loader2, Info, Layers, CheckCircle2, AlertCircle, Edit2, Tag, Trash2, ShieldAlert } from 'lucide-react';
 import { supabase } from '../services/supabase';
@@ -27,8 +28,10 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
   const [importTargetAgencyId, setImportTargetAgencyId] = useState(user.agency_id);
 
   const t = translations[lang];
+  
+  // ROLES LOGIC: STRICT RESTRICTION
   const isSuper = user.role === UserRole.SUPER_ADMIN;
-  const isAdmin = user.role === UserRole.ADMIN || isSuper;
+  const isOnlyAdmin = user.role === UserRole.ADMIN; // Only ADMIN can manage stock
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -93,6 +96,7 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
           };
         }).filter((r): r is any => r !== null && r.username.length > 0);
 
+        // Even though target aid can be different for Super Admin, the check is at the button level
         const targetAid = isSuper ? importTargetAgencyId : user.agency_id;
         const res = await supabase.importTickets(rows, user.id, targetAid);
         
@@ -173,7 +177,8 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
           </p>
         </div>
         <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-          {isAdmin && (
+          {/* ONLY ADMIN ALLOWED TO MANAGE STOCK ACTIONS */}
+          {isOnlyAdmin && (
             <>
               <button 
                 onClick={() => {
@@ -281,7 +286,7 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex justify-center items-center gap-2">
-                      {tk.status === TicketStatus.UNSOLD && isAdmin && (
+                      {tk.status === TicketStatus.UNSOLD && isOnlyAdmin && (
                         <>
                           <button 
                             onClick={() => { 
@@ -304,6 +309,10 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
                       {tk.status === TicketStatus.SOLD && (
                         <span className="px-3 py-1 bg-blue-50 text-blue-600 dark:bg-blue-900/20 text-[8px] font-black uppercase rounded-lg">Vendu</span>
                       )}
+                      {/* If Super Admin or Seller, show info or empty column if no specific action allowed */}
+                      {(isSuper || user.role === UserRole.SELLER) && tk.status === TicketStatus.UNSOLD && (
+                        <span className="text-[8px] text-gray-400 uppercase font-black tracking-tighter">Lecture seule</span>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -319,8 +328,8 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
         </div>
       </div>
 
-      {/* Confirmation Single Delete */}
-      {showSingleDeleteModal && (
+      {/* Confirmation Single Delete (Accessible only via isOnlyAdmin trigger) */}
+      {showSingleDeleteModal && isOnlyAdmin && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in">
           <div className="bg-white dark:bg-gray-800 w-full max-w-sm rounded-[2.5rem] p-10 shadow-2xl text-center border dark:border-gray-700">
             <div className="w-20 h-20 bg-red-50 text-red-500 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-inner"><AlertCircle size={40} /></div>
@@ -336,8 +345,8 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
         </div>
       )}
 
-      {/* Modal Purge Profile */}
-      {showPurgeModal && (
+      {/* Modal Purge Profile (Accessible only via isOnlyAdmin trigger) */}
+      {showPurgeModal && isOnlyAdmin && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in">
           <div className="bg-white dark:bg-gray-800 w-full max-w-sm rounded-[2.5rem] p-10 shadow-2xl text-center border dark:border-gray-700">
             <div className="w-20 h-20 bg-red-50 text-red-600 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-inner"><ShieldAlert size={40} /></div>
@@ -362,8 +371,8 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
         </div>
       )}
 
-      {/* Price Modal (Updated to support profile selection if global) */}
-      {showPriceModal && (
+      {/* Price Modal (Accessible only via isOnlyAdmin trigger) */}
+      {showPriceModal && isOnlyAdmin && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in">
           <div className="bg-white dark:bg-gray-800 w-full max-w-sm rounded-[3rem] p-10 shadow-2xl border dark:border-gray-700">
             <div className="flex justify-between items-center mb-8">
@@ -398,14 +407,15 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
         </div>
       )}
 
-      {/* Import Modal */}
-      {showImport && (
+      {/* Import Modal (Accessible only via isOnlyAdmin trigger) */}
+      {showImport && isOnlyAdmin && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in">
           <div className="bg-white dark:bg-gray-800 w-full max-w-sm rounded-[3rem] p-10 shadow-2xl border dark:border-gray-700">
             <div className="flex justify-between items-center mb-8">
               <h3 className="text-2xl font-black uppercase tracking-tight dark:text-white">Import CSV</h3>
               <button onClick={() => setShowImport(false)} className="p-2 bg-gray-100 dark:bg-gray-700 rounded-full active:scale-90"><X size={20} /></button>
             </div>
+            {/* Super Admin selector here is technically disabled by isOnlyAdmin but kept for logical completeness */}
             {isSuper && (
               <div className="mb-6 space-y-2 text-left">
                 <label className="text-[9px] font-black text-gray-400 uppercase ml-3">Agence Cible</label>
