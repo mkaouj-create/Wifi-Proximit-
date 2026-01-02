@@ -13,19 +13,6 @@ export enum TicketStatus {
 }
 
 export type AgencyStatus = 'active' | 'inactive';
-export type SubscriptionStatus = 'active' | 'expired' | 'trial';
-
-export interface SubscriptionPlan {
-  id: string;
-  name: string;
-  months: number;
-  price: number;
-  currency: string;
-  features: string[];
-  is_popular: boolean;
-  order_index: number;
-  created_at?: string;
-}
 
 export interface AgencyModules {
   dashboard: boolean;
@@ -77,16 +64,6 @@ export interface Sale {
   customer_phone?: string;
 }
 
-export interface CreditTransaction {
-  id: string;
-  agency_id: string;
-  amount: number; 
-  type: 'RECHARGE' | 'CONSUMPTION' | 'REFUND';
-  description: string;
-  created_at: string;
-  created_by: string;
-}
-
 export interface AgencySettings {
   whatsapp_receipt_header?: string;
   whatsapp_receipt_footer?: string;
@@ -96,10 +73,6 @@ export interface AgencySettings {
   business_address?: string;
   auto_cleanup_days?: number;
   modules?: AgencyModules;
-  archived_revenue?: number;
-  archived_sales_count?: number;
-  last_cleanup_at?: string;
-  total_tickets_ever?: number;
 }
 
 export interface Agency {
@@ -123,4 +96,15 @@ export interface ActivityLog {
   action: string;
   details: string;
   created_at: string;
+}
+
+export interface SubscriptionPlan {
+  id: string;
+  name: string;
+  months: number;
+  price: number;
+  currency: string;
+  features: string[];
+  is_popular: boolean;
+  order_index: number;
 }
