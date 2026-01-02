@@ -169,7 +169,7 @@ const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang, notify }) =
 
       {showConfirm && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-300">
-          <div className="bg-white dark:bg-gray-800 w-full max-sm rounded-[3rem] p-10 shadow-2xl text-center border dark:border-gray-700">
+          <div className="bg-white dark:bg-gray-800 w-full max-w-sm rounded-[3rem] p-10 shadow-2xl text-center border dark:border-gray-700">
             <div className="w-20 h-20 bg-amber-50 text-amber-500 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-inner"><AlertTriangle size={40} /></div>
             <h3 className="text-2xl font-black uppercase tracking-tight mb-2">Sauvegarder ?</h3>
             <p className="text-sm text-gray-500 dark:text-gray-400 font-medium mb-8 leading-relaxed">Ces paramètres affecteront tous les reçus envoyés à vos clients.</p>
