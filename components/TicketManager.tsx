@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Search, FileUp, X, Loader2, Info, Layers, CheckCircle2, AlertCircle, Edit2, Tag, Trash2, ShieldAlert } from 'lucide-react';
 import { supabase } from '../services/supabase';
@@ -173,7 +172,7 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
              {loading ? 'Mise à jour stock...' : `${filtered.length} tickets filtrés`}
           </p>
         </div>
-        <div className="flex gap-2 w-full sm:w-auto">
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
           {isAdmin && (
             <>
               <button 
@@ -183,13 +182,27 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
                     setShowPurgeModal(true);
                   } else { notify('info', "Aucun ticket invendu à purger."); }
                 }} 
-                className="flex-1 sm:flex-none bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400 px-6 py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest active:scale-95 transition-all flex items-center justify-center gap-2 border border-red-100 dark:border-red-800"
+                className="flex-1 sm:flex-none bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400 px-5 py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest active:scale-95 transition-all flex items-center justify-center gap-2 border border-red-100 dark:border-red-800"
               >
                 <Trash2 size={16}/> Purger
               </button>
               <button 
+                onClick={() => {
+                  if (uniqueProfiles.length > 0) {
+                    const firstProfile = uniqueProfiles[0];
+                    setPriceTargetProfile(firstProfile);
+                    const sample = tickets.find(t => t.profile === firstProfile && t.status === TicketStatus.UNSOLD);
+                    setNewPriceValue(sample ? sample.price.toString() : '');
+                    setShowPriceModal(true);
+                  } else { notify('info', "Aucun ticket invendu."); }
+                }} 
+                className="flex-1 sm:flex-none bg-indigo-50 text-indigo-600 dark:bg-indigo-900/20 dark:text-indigo-400 px-5 py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest active:scale-95 transition-all flex items-center justify-center gap-2 border border-indigo-100 dark:border-indigo-800"
+              >
+                <Tag size={16}/> Prix Profil
+              </button>
+              <button 
                 onClick={() => setShowImport(true)} 
-                className="flex-1 sm:flex-none bg-primary-600 text-white px-6 py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-xl shadow-primary-500/30 active:scale-95 transition-all flex items-center justify-center gap-2"
+                className="flex-1 sm:flex-none bg-primary-600 text-white px-5 py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-xl shadow-primary-500/30 active:scale-95 transition-all flex items-center justify-center gap-2"
               >
                 <FileUp size={16}/> {t.importCsv}
               </button>
@@ -271,7 +284,11 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
                       {tk.status === TicketStatus.UNSOLD && isAdmin && (
                         <>
                           <button 
-                            onClick={() => { setPriceTargetProfile(tk.profile); setNewPriceValue(tk.price.toString()); setShowPriceModal(true); }}
+                            onClick={() => { 
+                              setPriceTargetProfile(tk.profile); 
+                              setNewPriceValue(tk.price.toString()); 
+                              setShowPriceModal(true); 
+                            }}
                             className="p-2 text-gray-300 hover:text-primary-500 transition-all active:scale-90"
                           >
                             <Edit2 size={14} />
@@ -307,8 +324,8 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in">
           <div className="bg-white dark:bg-gray-800 w-full max-w-sm rounded-[2.5rem] p-10 shadow-2xl text-center border dark:border-gray-700">
             <div className="w-20 h-20 bg-red-50 text-red-500 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-inner"><AlertCircle size={40} /></div>
-            <h3 className="text-xl font-black uppercase mb-2">Supprimer Ticket ?</h3>
-            <p className="text-sm text-gray-500 mb-8 leading-relaxed">Voulez-vous supprimer le ticket <b>{showSingleDeleteModal.username}</b> de l'inventaire ?</p>
+            <h3 className="text-xl font-black uppercase mb-2 text-gray-900 dark:text-white">Supprimer Ticket ?</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 font-medium mb-8 leading-relaxed">Voulez-vous supprimer le ticket <b>{showSingleDeleteModal.username}</b> de l'inventaire ?</p>
             <div className="flex flex-col gap-3">
               <button onClick={handleDeleteSingle} disabled={isDeleting} className="w-full py-5 bg-red-600 text-white rounded-2xl font-black text-sm uppercase flex justify-center items-center gap-2 shadow-xl shadow-red-500/20 active:scale-95">
                 {isDeleting && <Loader2 size={16} className="animate-spin" />} Supprimer
@@ -324,7 +341,7 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in">
           <div className="bg-white dark:bg-gray-800 w-full max-w-sm rounded-[2.5rem] p-10 shadow-2xl text-center border dark:border-gray-700">
             <div className="w-20 h-20 bg-red-50 text-red-600 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-inner"><ShieldAlert size={40} /></div>
-            <h3 className="text-xl font-black uppercase mb-4">Purge Inventaire</h3>
+            <h3 className="text-xl font-black uppercase mb-4 text-gray-900 dark:text-white">Purge Inventaire</h3>
             <div className="space-y-4 mb-8">
               <label className="text-[10px] font-black uppercase text-gray-400 text-left block ml-2">Profil à vider</label>
               <select 
@@ -345,7 +362,7 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
         </div>
       )}
 
-      {/* Price Modal */}
+      {/* Price Modal (Updated to support profile selection if global) */}
       {showPriceModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in">
           <div className="bg-white dark:bg-gray-800 w-full max-w-sm rounded-[3rem] p-10 shadow-2xl border dark:border-gray-700">
@@ -353,16 +370,27 @@ const TicketManager: React.FC<{ user: UserProfile, lang: Language, notify: (type
               <h3 className="text-2xl font-black uppercase tracking-tight dark:text-white">Prix Profil</h3>
               <button onClick={() => setShowPriceModal(false)} className="p-2 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-400 active:scale-90"><X size={20} /></button>
             </div>
-            <form onSubmit={handleUpdatePrice} className="space-y-6">
-              <div className="space-y-2 text-left">
+            <form onSubmit={handleUpdatePrice} className="space-y-6 text-left">
+              <div className="space-y-2">
                 <label className="text-[9px] font-black text-gray-400 uppercase ml-3">Profil</label>
-                <input disabled className="w-full p-5 bg-gray-100 dark:bg-gray-900 rounded-2xl font-black text-xs uppercase" value={priceTargetProfile} />
+                <select 
+                  className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl outline-none font-bold text-sm dark:text-white"
+                  value={priceTargetProfile}
+                  onChange={e => {
+                    const prof = e.target.value;
+                    setPriceTargetProfile(prof);
+                    const sample = tickets.find(t => t.profile === prof && t.status === TicketStatus.UNSOLD);
+                    if (sample) setNewPriceValue(sample.price.toString());
+                  }}
+                >
+                  {uniqueProfiles.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
               </div>
-              <div className="space-y-2 text-left">
+              <div className="space-y-2">
                 <label className="text-[9px] font-black text-gray-400 uppercase ml-3">Nouveau Tarif (XOF)</label>
                 <input type="number" className="w-full p-5 bg-gray-50 dark:bg-gray-900 rounded-2xl font-black text-2xl text-center dark:text-white outline-none focus:ring-2 focus:ring-primary-500/20 transition-all" value={newPriceValue} onChange={e => setNewPriceValue(e.target.value)} required />
               </div>
-              <button type="submit" disabled={isUpdatingPrice} className="w-full py-5 bg-indigo-600 text-white rounded-2xl font-black text-sm uppercase shadow-xl flex justify-center items-center gap-2">
+              <button type="submit" disabled={isUpdatingPrice} className="w-full py-5 bg-indigo-600 text-white rounded-2xl font-black text-sm uppercase shadow-xl flex justify-center items-center gap-2 active:scale-95 transition-all">
                 {isUpdatingPrice ? <Loader2 className="animate-spin" size={16} /> : <CheckCircle2 size={16} />} Appliquer
               </button>
             </form>
