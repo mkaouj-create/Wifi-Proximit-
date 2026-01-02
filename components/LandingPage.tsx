@@ -146,21 +146,6 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLoginClick }) => {
                 ))}
             </div>
           )}
-
-          <div className="mt-12 md:mt-16 text-center">
-            <div className="inline-flex flex-col md:flex-row items-center gap-6 p-6 md:p-8 bg-primary-50 dark:bg-primary-900/20 rounded-[2.5rem] border border-primary-100 dark:border-primary-800">
-                <div className="w-16 h-16 bg-white dark:bg-gray-800 rounded-2xl flex items-center justify-center text-primary-600 shadow-lg shrink-0">
-                    <CheckCircle2 size={32} />
-                </div>
-                <div className="text-center md:text-left">
-                    <h4 className="text-lg font-black dark:text-white leading-none">Essai Gratuit "Trial"</h4>
-                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-2 font-medium">Profitez de 14 jours d'accès complet sans carte bancaire pour tester la plateforme.</p>
-                </div>
-                <button onClick={onLoginClick} className="w-full md:w-auto px-8 py-4 bg-primary-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-primary-500/30 hover:bg-primary-700 transition-all whitespace-nowrap">
-                    Démarrer l'essai
-                </button>
-            </div>
-          </div>
         </div>
       </section>
 
@@ -182,7 +167,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLoginClick }) => {
               />
               <BenefitItem 
                 title="Multi-Agences" 
-                desc="Gérez plusieurs points de vente et équipes depuis une interface unique et centralisée." 
+                desc="Gerez plusieurs points de vente et équipes depuis une interface unique et centralisée." 
               />
             </div>
           </div>
