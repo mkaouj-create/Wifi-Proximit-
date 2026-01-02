@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { UserPlus, User, X, AlertTriangle, Key, Loader2, Trash2 } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { UserPlus, User, X, AlertTriangle, Key, Loader2, Trash2, Building2, Filter } from 'lucide-react';
 import { supabase } from '../services/supabase';
-import { UserProfile, UserRole } from '../types';
+import { UserProfile, UserRole, Agency } from '../types';
 import { translations, Language } from '../i18n';
 
 interface UserManagementProps {
@@ -11,6 +11,7 @@ interface UserManagementProps {
 
 const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
   const [users, setUsers] = useState<UserProfile[]>([]);
+  const [agencies, setAgencies] = useState<Agency[]>([]);
   const [showAdd, setShowAdd] = useState(false);
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
@@ -18,8 +19,10 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
   const [passwordModalUser, setPasswordModalUser] = useState<UserProfile | null>(null);
   const [confirmAction, setConfirmAction] = useState<{type: 'ADD' | 'PWD' | 'DELETE', payload?: any} | null>(null);
 
+  const [selectedAgencyFilter, setSelectedAgencyFilter] = useState('ALL');
+
   const [formData, setFormData] = useState({
-    email: '', password: '', pin: '', role: UserRole.SELLER, agencyId: user.agency_id
+    email: '', password: '', pin: '', role: UserRole.SELLER, agency_id: user.agency_id
   });
   const [resetPwdValue, setResetPwdValue] = useState('');
 
@@ -31,12 +34,21 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
   const loadData = async () => {
     setLoading(true);
     try {
-      const uData = await supabase.getUsers(user.agency_id, user.role);
+      const [uData, aData] = await Promise.all([
+        supabase.getUsers(user.agency_id, user.role),
+        isSuper ? supabase.getAgencies() : Promise.resolve([])
+      ]);
       setUsers(isSuper ? uData : uData.filter(u => u.role !== UserRole.SUPER_ADMIN));
+      if (isSuper) setAgencies(aData);
     } catch (error) {
       console.error("Erreur lors du chargement des utilisateurs:", error);
     } finally { setLoading(false); }
   };
+
+  const filteredUsers = useMemo(() => {
+    if (selectedAgencyFilter === 'ALL') return users;
+    return users.filter(u => u.agency_id === selectedAgencyFilter);
+  }, [users, selectedAgencyFilter]);
 
   const canManage = (target: UserProfile) => {
     if (user.id === target.id) return false;
@@ -53,7 +65,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
         case 'ADD':
           await supabase.addUser({ ...formData, display_name: formData.email.split('@')[0] });
           setShowAdd(false);
-          setFormData({ email: '', password: '', pin: '', role: UserRole.SELLER, agencyId: user.agency_id });
+          setFormData({ email: '', password: '', pin: '', role: UserRole.SELLER, agency_id: user.agency_id });
           break;
         case 'DELETE':
           await supabase.deleteUser(confirmAction.payload.id, user);
@@ -75,19 +87,38 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
 
   return (
     <div className="space-y-8 animate-in fade-in pb-20">
-      <div className="flex items-center justify-between px-1">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-1">
         <div>
           <h2 className="text-3xl font-black text-gray-900 dark:text-white uppercase tracking-tight leading-none">{t.manageTeam}</h2>
-          <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest mt-2">{users.length} collaborateurs actifs</p>
+          <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest mt-2">{filteredUsers.length} collaborateurs actifs</p>
         </div>
-        {(isSuper || user.role === UserRole.ADMIN) && (
-          <button 
-            onClick={() => setShowAdd(true)} 
-            className="flex items-center gap-3 bg-primary-600 text-white px-6 py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest shadow-xl shadow-primary-500/30 active:scale-95 transition-all"
-          >
-            <UserPlus size={18} /> {t.addMember}
-          </button>
-        )}
+        <div className="flex flex-wrap gap-2">
+          {isSuper && (
+            <div className="relative">
+              <select 
+                value={selectedAgencyFilter} 
+                onChange={e => setSelectedAgencyFilter(e.target.value)}
+                className="appearance-none bg-white dark:bg-gray-800 border dark:border-gray-700 pl-10 pr-8 py-4 rounded-2xl text-[10px] font-black uppercase shadow-sm outline-none cursor-pointer hover:bg-gray-50 transition-all text-gray-600 dark:text-gray-300 min-w-[180px]"
+              >
+                <option value="ALL">Toutes les agences</option>
+                {agencies.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+              </select>
+              <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
+            </div>
+          )}
+          {(isSuper || user.role === UserRole.ADMIN) && (
+            <button 
+              onClick={() => {
+                 // Reset form with correct default agency
+                 setFormData(prev => ({...prev, agency_id: isSuper && agencies.length > 0 ? agencies[0].id : user.agency_id}));
+                 setShowAdd(true);
+              }} 
+              className="flex items-center gap-3 bg-primary-600 text-white px-6 py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest shadow-xl shadow-primary-500/30 active:scale-95 transition-all"
+            >
+              <UserPlus size={18} /> {t.addMember}
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -95,7 +126,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
           <div className="col-span-full flex justify-center py-20">
             <Loader2 className="animate-spin text-primary-500 w-8 h-8" />
           </div>
-        ) : users.map(u => (
+        ) : filteredUsers.map(u => (
           <div key={u.id} className="bg-white dark:bg-gray-800 p-6 rounded-[2rem] border border-gray-100 dark:border-gray-700 flex items-center justify-between shadow-sm hover:shadow-md transition-all group">
             <div className="flex items-center gap-4 text-left min-w-0">
               <div className="w-12 h-12 bg-gray-50 dark:bg-gray-900/50 dark:border dark:border-gray-700 rounded-2xl flex items-center justify-center text-gray-400 group-hover:text-primary-500 transition-colors shrink-0">
@@ -104,6 +135,12 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
               <div className="min-w-0">
                 <p className="font-black text-gray-900 dark:text-white uppercase truncate text-sm">{u.display_name}</p>
                 <p className="text-[10px] text-gray-400 truncate font-medium uppercase tracking-tight">{u.email}</p>
+                {isSuper && (
+                  <div className="flex items-center gap-1 mt-1 text-[9px] font-black text-indigo-500 uppercase tracking-widest">
+                    <Building2 size={10} />
+                    <span className="truncate max-w-[150px]">{agencies.find(a => a.id === u.agency_id)?.name || 'N/A'}</span>
+                  </div>
+                )}
               </div>
             </div>
             
@@ -134,6 +171,11 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
             </div>
           </div>
         ))}
+        {!loading && filteredUsers.length === 0 && (
+          <div className="col-span-full py-20 text-center text-gray-400">
+             <p className="text-xs font-black uppercase tracking-widest">Aucun utilisateur trouvé</p>
+          </div>
+        )}
       </div>
 
       {confirmAction && (
@@ -186,6 +228,18 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
               </button>
             </div>
             <div className="space-y-4">
+              {isSuper && (
+                <div className="space-y-1 text-left">
+                  <label className="text-[10px] font-black uppercase text-gray-400 ml-2">Agence de rattachement</label>
+                  <select 
+                    className="w-full p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl outline-none font-bold dark:text-white appearance-none cursor-pointer focus:ring-2 focus:ring-primary-500/20 transition-all border border-transparent focus:border-primary-500/10" 
+                    value={formData.agency_id} 
+                    onChange={e => setFormData({...formData, agency_id: e.target.value})}
+                  >
+                    {agencies.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                  </select>
+                </div>
+              )}
               <div className="space-y-1 text-left">
                 <label className="text-[10px] font-black uppercase text-gray-400 ml-2">Email</label>
                 <input 
@@ -227,6 +281,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
                 >
                   <option value={UserRole.SELLER}>{t.seller}</option>
                   <option value={UserRole.ADMIN}>{t.admin}</option>
+                  {isSuper && <option value={UserRole.SUPER_ADMIN}>Super Admin</option>}
                 </select>
               </div>
               <button 

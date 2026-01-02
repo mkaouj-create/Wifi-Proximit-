@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Building2, Save, CheckCircle, MessageSquare, AlertTriangle, ShieldCheck, Eye, EyeOff, Loader2, Trash2, Globe, Clock, ShieldAlert } from 'lucide-react';
+import { Building2, Save, CheckCircle, MessageSquare, AlertTriangle, ShieldCheck, Eye, EyeOff, Loader2, Trash2, Globe, Clock, ShieldAlert, ChevronDown } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import { Agency, UserProfile, UserRole } from '../types';
 import { translations, Language } from '../i18n';
@@ -12,6 +12,9 @@ interface AgencySettingsProps {
 
 const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang, notify }) => {
   const [agency, setAgency] = useState<Agency | null>(null);
+  const [agencies, setAgencies] = useState<Agency[]>([]);
+  const [targetAgencyId, setTargetAgencyId] = useState(user.agency_id);
+  
   const [name, setName] = useState('');
   const [currency, setCurrency] = useState('GNF');
   const [receiptHeader, setReceiptHeader] = useState('');
@@ -29,12 +32,28 @@ const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang, notify }) =
   const [pwdLoading, setPwdLoading] = useState(false);
 
   const t = translations[lang];
+  const isSuper = user.role === UserRole.SUPER_ADMIN;
 
-  useEffect(() => { loadAgency(); }, []);
+  useEffect(() => { 
+    if (isSuper) {
+        supabase.getAgencies().then(data => {
+            setAgencies(data);
+            if (data.length > 0) setTargetAgencyId(data[0].id);
+        });
+    } else {
+        loadAgency(); 
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isSuper && targetAgencyId) {
+        loadAgency();
+    }
+  }, [targetAgencyId]);
 
   const loadAgency = async () => {
     try {
-      const data = await supabase.getAgency(user.agency_id);
+      const data = await supabase.getAgency(targetAgencyId);
       if (data) {
         setAgency(data);
         setName(data.name);
@@ -51,7 +70,7 @@ const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang, notify }) =
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      await supabase.updateAgency(user.agency_id, name, {
+      await supabase.updateAgency(targetAgencyId, name, {
         ...agency?.settings,
         currency,
         whatsapp_receipt_header: receiptHeader,
@@ -95,14 +114,28 @@ const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang, notify }) =
 
   return (
     <div className="max-w-4xl mx-auto space-y-10 animate-in fade-in slide-in-from-bottom-4 pb-32 px-1">
-      <div className="flex items-center gap-6">
-        <div className="w-20 h-20 bg-primary-600 text-white rounded-[2.5rem] flex items-center justify-center shadow-2xl shadow-primary-500/20 shrink-0 border-4 border-white dark:border-gray-800">
-          <Building2 size={36} />
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div className="flex items-center gap-6">
+            <div className="w-20 h-20 bg-primary-600 text-white rounded-[2.5rem] flex items-center justify-center shadow-2xl shadow-primary-500/20 shrink-0 border-4 border-white dark:border-gray-800">
+              <Building2 size={36} />
+            </div>
+            <div className="text-left">
+              <h2 className="text-3xl font-black text-gray-900 dark:text-white uppercase tracking-tight leading-none">{t.settings}</h2>
+              <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest mt-2">Console d'administration • {isSuper ? 'Super Admin' : name}</p>
+            </div>
         </div>
-        <div className="text-left">
-          <h2 className="text-3xl font-black text-gray-900 dark:text-white uppercase tracking-tight leading-none">{t.settings}</h2>
-          <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest mt-2">Console d'administration • {name}</p>
-        </div>
+        {isSuper && (
+            <div className="relative z-20">
+                <select 
+                    value={targetAgencyId} 
+                    onChange={e => setTargetAgencyId(e.target.value)}
+                    className="appearance-none bg-white dark:bg-gray-800 border dark:border-gray-700 pl-6 pr-12 py-4 rounded-2xl text-xs font-black uppercase shadow-sm outline-none cursor-pointer hover:bg-gray-50 transition-all text-gray-900 dark:text-white min-w-[200px]"
+                >
+                    {agencies.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                </select>
+                <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={16} />
+            </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -127,28 +160,30 @@ const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang, notify }) =
           <Field label={t.receiptFooter}><textarea value={receiptFooter} onChange={e => setReceiptFooter(e.target.value)} className="input-field min-h-[100px] resize-none" placeholder="Texte en bas du reçu..." /></Field>
         </Section>
 
-        <Section title="Sécurité Administrateur" icon={<ShieldCheck size={20} />} fullWidth>
-          <form onSubmit={handleChangePwd} className="flex flex-col md:flex-row gap-4 items-end text-left w-full">
-            <div className="flex-1 w-full space-y-2">
-              <label className="text-[10px] font-black uppercase text-gray-400 ml-2 tracking-widest leading-none">{t.changePassword}</label>
-              <div className="relative">
-                <input 
-                  type={showPwd ? "text" : "password"} 
-                  className="input-field pr-12" 
-                  value={newPassword} 
-                  onChange={e => setNewPassword(e.target.value)} 
-                  placeholder="Nouveau mot de passe" 
-                />
-                <button type="button" onClick={() => setShowPwd(!showPwd)} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-primary-500 transition-all p-2 active:scale-90">
-                  {showPwd ? <EyeOff size={18} /> : <Eye size={18} />}
+        {!isSuper && (
+            <Section title="Sécurité Compte" icon={<ShieldCheck size={20} />} fullWidth>
+            <form onSubmit={handleChangePwd} className="flex flex-col md:flex-row gap-4 items-end text-left w-full">
+                <div className="flex-1 w-full space-y-2">
+                <label className="text-[10px] font-black uppercase text-gray-400 ml-2 tracking-widest leading-none">{t.changePassword}</label>
+                <div className="relative">
+                    <input 
+                    type={showPwd ? "text" : "password"} 
+                    className="input-field pr-12" 
+                    value={newPassword} 
+                    onChange={e => setNewPassword(e.target.value)} 
+                    placeholder="Nouveau mot de passe" 
+                    />
+                    <button type="button" onClick={() => setShowPwd(!showPwd)} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-primary-500 transition-all p-2 active:scale-90">
+                    {showPwd ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                </div>
+                </div>
+                <button disabled={pwdLoading || !newPassword} className="w-full md:w-auto h-[62px] px-10 bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-xl disabled:opacity-50 transition-all active:scale-95">
+                {pwdLoading ? <Loader2 size={18} className="animate-spin" /> : 'Mettre à jour'}
                 </button>
-              </div>
-            </div>
-            <button disabled={pwdLoading || !newPassword} className="w-full md:w-auto h-[62px] px-10 bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-xl disabled:opacity-50 transition-all active:scale-95">
-              {pwdLoading ? <Loader2 size={18} className="animate-spin" /> : 'Mettre à jour'}
-            </button>
-          </form>
-        </Section>
+            </form>
+            </Section>
+        )}
       </div>
 
       <div className="fixed bottom-10 left-4 right-4 md:relative md:bottom-0 flex justify-center pt-10 pb-4">
