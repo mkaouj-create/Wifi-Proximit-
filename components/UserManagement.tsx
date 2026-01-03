@@ -10,16 +10,20 @@ interface UserManagementProps {
 }
 
 const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
+  const t = translations[lang];
+  const isSuper = user.role === UserRole.SUPER_ADMIN;
+
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [agencies, setAgencies] = useState<Agency[]>([]);
+  const [selectedAgencyFilter, setSelectedAgencyFilter] = useState('ALL');
   const [showAdd, setShowAdd] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [actionLoading, setActionLoading] = useState(false);
   
+  // États UI conservés
+  const [actionLoading, setActionLoading] = useState(false);
   const [passwordModalUser, setPasswordModalUser] = useState<UserProfile | null>(null);
   const [confirmAction, setConfirmAction] = useState<{type: 'ADD' | 'PWD' | 'DELETE', payload?: any} | null>(null);
-
-  const [selectedAgencyFilter, setSelectedAgencyFilter] = useState('ALL');
+  const [resetPwdValue, setResetPwdValue] = useState('');
 
   const [formData, setFormData] = useState({
     email: '', 
@@ -28,10 +32,6 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
     role: UserRole.SELLER, 
     agency_id: user.agency_id || ''
   });
-  const [resetPwdValue, setResetPwdValue] = useState('');
-
-  const t = translations[lang];
-  const isSuper = user.role === UserRole.SUPER_ADMIN;
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -41,35 +41,21 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
         isSuper ? supabase.getAgencies() : Promise.resolve([])
       ]);
       setUsers(isSuper ? uData : uData.filter(u => u.role !== UserRole.SUPER_ADMIN));
-      if (isSuper) {
-        setAgencies(aData as Agency[]);
-      }
-    } catch (error) {
-      console.error("Erreur lors du chargement des utilisateurs:", error);
-    } finally { setLoading(false); }
+      setAgencies(aData as Agency[]);
+    } finally {
+      setLoading(false);
+    }
   }, [user.agency_id, user.role, isSuper]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
   const handleOpenAddModal = () => {
-    let defaultAgencyId = user.agency_id || '';
-    
-    if (isSuper && agencies.length > 0) {
-        // Si un filtre est actif, on l'utilise
-        if (selectedAgencyFilter !== 'ALL') {
-            defaultAgencyId = selectedAgencyFilter;
-        } else {
-            // Sinon on prend la première agence
-            defaultAgencyId = agencies[0].id;
-        }
-    }
-    
     setFormData({ 
         email: '', 
         password: '', 
         pin: '', 
         role: UserRole.SELLER, 
-        agency_id: defaultAgencyId 
+        agency_id: isSuper && agencies.length ? agencies[0].id : (user.agency_id || '')
     });
     setShowAdd(true);
   };

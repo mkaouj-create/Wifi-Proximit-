@@ -11,11 +11,14 @@ interface AgencySettingsProps {
 }
 
 const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang, notify }) => {
-  const [agency, setAgency] = useState<Agency | null>(null);
+  const t = translations[lang];
+  const isSuper = user.role === UserRole.SUPER_ADMIN;
+
   const [agencies, setAgencies] = useState<Agency[]>([]);
-  // Initialisation : l'admin voit son agence, le Super Admin verra la première de la liste après chargement
   const [targetAgencyId, setTargetAgencyId] = useState<string>(user.agency_id || '');
+  const [agency, setAgency] = useState<Agency | null>(null);
   
+  // États UI
   const [name, setName] = useState('');
   const [currency, setCurrency] = useState('GNF');
   const [receiptHeader, setReceiptHeader] = useState('');
@@ -32,46 +35,36 @@ const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang, notify }) =
   const [showPwd, setShowPwd] = useState(false);
   const [pwdLoading, setPwdLoading] = useState(false);
 
-  const t = translations[lang];
-  const isSuper = user.role === UserRole.SUPER_ADMIN;
-
-  // 1. Chargement de la liste des agences (Super Admin uniquement)
+  /** Charger la liste des agences (Super Admin) */
   useEffect(() => {
-    let mounted = true;
-    const fetchAgencies = async () => {
-      if (isSuper) {
-        try {
-          const data = await supabase.getAgencies();
-          if (mounted) {
-            setAgencies(data);
-            // Si aucune cible n'est définie ou si l'ID actuel n'est pas dans la liste, on prend le premier
-            if (data.length > 0) {
-               setTargetAgencyId(prev => {
-                 const exists = data.find(a => a.id === prev);
-                 return exists ? prev : data[0].id;
-               });
-            }
-          }
-        } catch (error) {
-          console.error("Erreur chargement agences:", error);
+    if (!isSuper) return;
+
+    const loadAgencies = async () => {
+      try {
+        const data = await supabase.getAgencies();
+        setAgencies(data);
+        if (!targetAgencyId && data.length > 0) {
+          setTargetAgencyId(data[0].id);
         }
+      } catch (e) {
+        console.error(e);
       }
     };
-    
-    fetchAgencies();
-    return () => { mounted = false; };
-  }, [isSuper]); 
 
-  // 2. Chargement des détails de l'agence cible
+    loadAgencies();
+  }, [isSuper]); // Dépendance uniquement sur isSuper, targetAgencyId géré conditionnellement à l'intérieur
+
+  /** Charger les détails de l’agence sélectionnée */
   const loadAgency = useCallback(async () => {
     if (!targetAgencyId) return;
-    
+
     try {
       const data = await supabase.getAgency(targetAgencyId);
       if (data) {
         setAgency(data);
         setName(data.name || '');
         setCurrency(data.settings?.currency || 'GNF');
+        // Restauration des autres champs pour l'UI
         setReceiptHeader(data.settings?.whatsapp_receipt_header || '');
         setReceiptFooter(data.settings?.whatsapp_receipt_footer || '');
         setContactPhone(data.settings?.contact_phone || '');
@@ -79,8 +72,8 @@ const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang, notify }) =
         setBusinessAddress(data.settings?.business_address || '');
       }
     } catch (e) { 
-      console.error("Erreur chargement détails agence", e); 
-      if (notify) notify('error', 'Impossible de charger les données de l\'agence');
+      console.error(e); 
+      if (notify) notify('error', 'Erreur chargement agence');
     }
   }, [targetAgencyId, notify]);
 
