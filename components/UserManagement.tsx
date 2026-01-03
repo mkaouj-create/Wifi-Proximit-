@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { UserPlus, User, X, AlertTriangle, Key, Loader2, Trash2, Building2, Filter } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import { UserProfile, UserRole, Agency } from '../types';
@@ -22,16 +22,18 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
   const [selectedAgencyFilter, setSelectedAgencyFilter] = useState('ALL');
 
   const [formData, setFormData] = useState({
-    email: '', password: '', pin: '', role: UserRole.SELLER, agency_id: user.agency_id
+    email: '', 
+    password: '', 
+    pin: '', 
+    role: UserRole.SELLER, 
+    agency_id: user.agency_id || ''
   });
   const [resetPwdValue, setResetPwdValue] = useState('');
 
   const t = translations[lang];
   const isSuper = user.role === UserRole.SUPER_ADMIN;
 
-  useEffect(() => { loadData(); }, []);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
       const [uData, aData] = await Promise.all([
@@ -39,10 +41,38 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
         isSuper ? supabase.getAgencies() : Promise.resolve([])
       ]);
       setUsers(isSuper ? uData : uData.filter(u => u.role !== UserRole.SUPER_ADMIN));
-      if (isSuper) setAgencies(aData);
+      if (isSuper) {
+        setAgencies(aData);
+      }
     } catch (error) {
       console.error("Erreur lors du chargement des utilisateurs:", error);
     } finally { setLoading(false); }
+  }, [user.agency_id, user.role, isSuper]);
+
+  useEffect(() => { loadData(); }, [loadData]);
+
+  // Logique améliorée pour définir l'agence par défaut dans le formulaire
+  const handleOpenAddModal = () => {
+    let defaultAgencyId = user.agency_id;
+    
+    if (isSuper && agencies.length > 0) {
+        // Si un filtre est actif, on l'utilise comme agence par défaut
+        if (selectedAgencyFilter !== 'ALL') {
+            defaultAgencyId = selectedAgencyFilter;
+        } else {
+            // Sinon on prend la première agence de la liste
+            defaultAgencyId = agencies[0].id;
+        }
+    }
+    
+    setFormData({ 
+        email: '', 
+        password: '', 
+        pin: '', 
+        role: UserRole.SELLER, 
+        agency_id: defaultAgencyId 
+    });
+    setShowAdd(true);
   };
 
   const filteredUsers = useMemo(() => {
@@ -59,21 +89,32 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
 
   const handleAction = async () => {
     if (!confirmAction) return;
+    
+    // Validation basique
+    if (confirmAction.type === 'ADD') {
+        if (!formData.email || !formData.password || !formData.agency_id) {
+            alert("Veuillez remplir tous les champs obligatoires (Email, MDP, Agence).");
+            return;
+        }
+    }
+
     setActionLoading(true);
     try {
       switch (confirmAction.type) {
         case 'ADD':
           await supabase.addUser({ ...formData, display_name: formData.email.split('@')[0] });
           setShowAdd(false);
-          setFormData({ email: '', password: '', pin: '', role: UserRole.SELLER, agency_id: user.agency_id });
+          // Le reset se fait au prochain open
           break;
         case 'DELETE':
           await supabase.deleteUser(confirmAction.payload.id, user);
           break;
         case 'PWD':
-          await supabase.updatePassword(passwordModalUser!.id, resetPwdValue, user);
-          setPasswordModalUser(null);
-          setResetPwdValue('');
+          if(passwordModalUser) {
+              await supabase.updatePassword(passwordModalUser.id, resetPwdValue, user);
+              setPasswordModalUser(null);
+              setResetPwdValue('');
+          }
           break;
       }
       await loadData();
@@ -108,11 +149,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
           )}
           {(isSuper || user.role === UserRole.ADMIN) && (
             <button 
-              onClick={() => {
-                 // Reset form with correct default agency
-                 setFormData(prev => ({...prev, agency_id: isSuper && agencies.length > 0 ? agencies[0].id : user.agency_id}));
-                 setShowAdd(true);
-              }} 
+              onClick={handleOpenAddModal} 
               className="flex items-center gap-3 bg-primary-600 text-white px-6 py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest shadow-xl shadow-primary-500/30 active:scale-95 transition-all"
             >
               <UserPlus size={18} /> {t.addMember}
