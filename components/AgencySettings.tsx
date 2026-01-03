@@ -36,7 +36,6 @@ const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang, notify }) =
   const isSuper = user.role === UserRole.SUPER_ADMIN;
 
   // 1. Chargement de la liste des agences (Super Admin uniquement)
-  // Correction: Retrait de targetAgencyId des dépendances pour éviter les boucles
   useEffect(() => {
     let mounted = true;
     const fetchAgencies = async () => {
@@ -45,14 +44,11 @@ const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang, notify }) =
           const data = await supabase.getAgencies();
           if (mounted) {
             setAgencies(data);
-            // Si on est Super Admin et qu'on n'a pas encore changé manuellement la cible,
-            // ou si la cible est notre propre ID (défaut), on prend la première agence de la liste.
+            // Si aucune cible n'est définie ou si l'ID actuel n'est pas dans la liste, on prend le premier
             if (data.length > 0) {
                setTargetAgencyId(prev => {
-                 // Si l'ID actuel n'est pas dans la liste ou est l'ID par défaut de l'utilisateur
-                 // On bascule sur la première agence trouvée
-                 const currentExists = data.some(a => a.id === prev);
-                 return (!prev || prev === user.agency_id || !currentExists) ? data[0].id : prev;
+                 const exists = data.find(a => a.id === prev);
+                 return exists ? prev : data[0].id;
                });
             }
           }
@@ -64,7 +60,7 @@ const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang, notify }) =
     
     fetchAgencies();
     return () => { mounted = false; };
-  }, [isSuper, user.agency_id]); // Dépendances stables
+  }, [isSuper]); 
 
   // 2. Chargement des détails de l'agence cible
   const loadAgency = useCallback(async () => {
@@ -112,7 +108,6 @@ const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang, notify }) =
       if (notify) notify('success', 'Paramètres sauvegardés');
       setTimeout(() => setSaved(false), 2000);
       
-      // Recharger pour être sûr d'avoir les dernières données
       loadAgency();
     } catch (e) { 
         if (notify) notify('error', "Erreur de sauvegarde");

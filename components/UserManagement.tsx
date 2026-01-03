@@ -42,7 +42,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
       ]);
       setUsers(isSuper ? uData : uData.filter(u => u.role !== UserRole.SUPER_ADMIN));
       if (isSuper) {
-        setAgencies(aData);
+        setAgencies(aData as Agency[]);
       }
     } catch (error) {
       console.error("Erreur lors du chargement des utilisateurs:", error);
@@ -51,16 +51,15 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  // Logique améliorée pour définir l'agence par défaut dans le formulaire
   const handleOpenAddModal = () => {
-    let defaultAgencyId = user.agency_id;
+    let defaultAgencyId = user.agency_id || '';
     
     if (isSuper && agencies.length > 0) {
-        // Si un filtre est actif, on l'utilise comme agence par défaut
+        // Si un filtre est actif, on l'utilise
         if (selectedAgencyFilter !== 'ALL') {
             defaultAgencyId = selectedAgencyFilter;
         } else {
-            // Sinon on prend la première agence de la liste
+            // Sinon on prend la première agence
             defaultAgencyId = agencies[0].id;
         }
     }
@@ -90,10 +89,9 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
   const handleAction = async () => {
     if (!confirmAction) return;
     
-    // Validation basique
     if (confirmAction.type === 'ADD') {
         if (!formData.email || !formData.password || !formData.agency_id) {
-            alert("Veuillez remplir tous les champs obligatoires (Email, MDP, Agence).");
+            alert("Veuillez remplir tous les champs obligatoires.");
             return;
         }
     }
@@ -104,7 +102,6 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
         case 'ADD':
           await supabase.addUser({ ...formData, display_name: formData.email.split('@')[0] });
           setShowAdd(false);
-          // Le reset se fait au prochain open
           break;
         case 'DELETE':
           await supabase.deleteUser(confirmAction.payload.id, user);
