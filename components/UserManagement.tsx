@@ -13,18 +13,22 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
   const t = translations[lang];
   const isSuper = user.role === UserRole.SUPER_ADMIN;
 
+  // États des données
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [agencies, setAgencies] = useState<Agency[]>([]);
-  const [selectedAgencyFilter, setSelectedAgencyFilter] = useState('ALL');
-  const [showAdd, setShowAdd] = useState(false);
   const [loading, setLoading] = useState(false);
   
-  // États UI conservés
+  // États de filtrage et UI
+  const [selectedAgencyFilter, setSelectedAgencyFilter] = useState('ALL');
+  const [showAdd, setShowAdd] = useState(false);
+  
+  // États pour les actions (Ajout, Suppression, Mot de passe)
   const [actionLoading, setActionLoading] = useState(false);
   const [passwordModalUser, setPasswordModalUser] = useState<UserProfile | null>(null);
   const [confirmAction, setConfirmAction] = useState<{type: 'ADD' | 'PWD' | 'DELETE', payload?: any} | null>(null);
   const [resetPwdValue, setResetPwdValue] = useState('');
 
+  // Formulaire d'ajout
   const [formData, setFormData] = useState({
     email: '', 
     password: '', 
@@ -33,40 +37,68 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
     agency_id: user.agency_id || ''
   });
 
+  // Chargement des données optimisé
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [uData, aData] = await Promise.all([
+      // Pour SuperAdmin: on charge utilisateurs + agences. Pour Admin: seulement utilisateurs.
+      const promises: [Promise<UserProfile[]>, Promise<Agency[]>] = [
         supabase.getUsers(user.agency_id, user.role),
         isSuper ? supabase.getAgencies() : Promise.resolve([])
-      ]);
-      setUsers(isSuper ? uData : uData.filter(u => u.role !== UserRole.SUPER_ADMIN));
-      setAgencies(aData as Agency[]);
+      ];
+
+      const [usersData, agenciesData] = await Promise.all(promises);
+
+      // Filtrage sécurité : on ne montre pas les Super Admins dans la liste standard
+      setUsers(isSuper ? usersData : usersData.filter(u => u.role !== UserRole.SUPER_ADMIN));
+      
+      if (isSuper) {
+        setAgencies(agenciesData);
+      }
+    } catch (error) {
+      console.error("Erreur chargement:", error);
     } finally {
       setLoading(false);
     }
   }, [user.agency_id, user.role, isSuper]);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
+  // Initialisation intelligente du formulaire d'ajout
   const handleOpenAddModal = () => {
+    let defaultAgencyId = user.agency_id || '';
+    
+    if (isSuper) {
+      // Si un filtre est actif, on l'utilise comme agence par défaut
+      if (selectedAgencyFilter !== 'ALL') {
+        defaultAgencyId = selectedAgencyFilter;
+      } else if (agencies.length > 0) {
+        // Sinon on prend la première agence disponible
+        defaultAgencyId = agencies[0].id;
+      }
+    }
+    
     setFormData({ 
         email: '', 
         password: '', 
         pin: '', 
         role: UserRole.SELLER, 
-        agency_id: isSuper && agencies.length ? agencies[0].id : (user.agency_id || '')
+        agency_id: defaultAgencyId 
     });
     setShowAdd(true);
   };
 
+  // Filtrage côté client pour performance instantanée
   const filteredUsers = useMemo(() => {
     if (selectedAgencyFilter === 'ALL') return users;
     return users.filter(u => u.agency_id === selectedAgencyFilter);
   }, [users, selectedAgencyFilter]);
 
+  // Vérification des permissions sur une cible
   const canManage = (target: UserProfile) => {
-    if (user.id === target.id) return false;
+    if (user.id === target.id) return false; // On ne se modifie pas soi-même ici
     if (isSuper) return true;
     if (user.role === UserRole.ADMIN && target.role === UserRole.SELLER) return true;
     return false;
@@ -75,9 +107,10 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
   const handleAction = async () => {
     if (!confirmAction) return;
     
+    // Validation basique
     if (confirmAction.type === 'ADD') {
         if (!formData.email || !formData.password || !formData.agency_id) {
-            alert("Veuillez remplir tous les champs obligatoires.");
+            alert("Veuillez remplir l'email, le mot de passe et choisir une agence.");
             return;
         }
     }
@@ -93,16 +126,21 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
           await supabase.deleteUser(confirmAction.payload.id, user);
           break;
         case 'PWD':
-          if(passwordModalUser) {
+          if (passwordModalUser && resetPwdValue.length >= 6) {
               await supabase.updatePassword(passwordModalUser.id, resetPwdValue, user);
               setPasswordModalUser(null);
               setResetPwdValue('');
+          } else if (resetPwdValue.length < 6) {
+              alert("Le mot de passe doit faire au moins 6 caractères");
+              setActionLoading(false);
+              return;
           }
           break;
       }
-      await loadData();
+      await loadData(); // Rafraîchissement
     } catch (e) { 
-      alert('Une erreur est survenue lors de l\'opération.');
+      console.error(e);
+      alert("Une erreur est survenue.");
     } finally { 
       setActionLoading(false); 
       setConfirmAction(null); 
@@ -198,6 +236,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
         )}
       </div>
 
+      {/* MODAL CONFIRMATION (Delete & Add) */}
       {confirmAction && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-300">
           <div className="bg-white dark:bg-gray-800 w-full max-w-sm rounded-[2.5rem] p-10 shadow-2xl text-center border dark:border-gray-700">
@@ -210,7 +249,9 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
               {confirmAction.type === 'DELETE' ? 'Confirmer Suppression' : t.confirm}
             </h3>
             <p className="text-sm text-gray-500 dark:text-gray-400 font-medium leading-relaxed mb-8">
-              {confirmAction.type === 'DELETE' ? 'Voulez-vous vraiment supprimer définitivement ce collaborateur de votre équipe ?' : 'Souhaitez-vous valider cette action ?'}
+              {confirmAction.type === 'DELETE' 
+                ? 'Voulez-vous vraiment supprimer définitivement ce collaborateur ?' 
+                : 'Souhaitez-vous valider cette action ?'}
             </p>
             <div className="flex flex-col gap-3">
               <button 
@@ -235,6 +276,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
         </div>
       )}
 
+      {/* MODAL AJOUT */}
       {showAdd && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-300">
           <div className="bg-white dark:bg-gray-800 w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl border dark:border-gray-700">
@@ -315,6 +357,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
         </div>
       )}
 
+      {/* MODAL RESET PASSWORD */}
       {passwordModalUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-300">
           <div className="bg-white dark:bg-gray-800 w-full max-w-sm rounded-[2.5rem] p-10 shadow-2xl text-center border dark:border-gray-700">

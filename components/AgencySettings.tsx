@@ -14,11 +14,12 @@ const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang, notify }) =
   const t = translations[lang];
   const isSuper = user.role === UserRole.SUPER_ADMIN;
 
+  // États principaux
   const [agencies, setAgencies] = useState<Agency[]>([]);
   const [targetAgencyId, setTargetAgencyId] = useState<string>(user.agency_id || '');
   const [agency, setAgency] = useState<Agency | null>(null);
   
-  // États UI
+  // États de formulaire
   const [name, setName] = useState('');
   const [currency, setCurrency] = useState('GNF');
   const [receiptHeader, setReceiptHeader] = useState('');
@@ -27,44 +28,52 @@ const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang, notify }) =
   const [supportEmail, setSupportEmail] = useState('');
   const [businessAddress, setBusinessAddress] = useState('');
   
+  // États UI
   const [saved, setSaved] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   
+  // États mot de passe
   const [newPassword, setNewPassword] = useState('');
   const [showPwd, setShowPwd] = useState(false);
   const [pwdLoading, setPwdLoading] = useState(false);
 
-  /** Charger la liste des agences (Super Admin) */
+  // 1. Chargement de la LISTE des agences (Uniquement Super Admin)
   useEffect(() => {
-    if (!isSuper) return;
+    let mounted = true;
 
-    const loadAgencies = async () => {
+    const fetchAgenciesList = async () => {
+      if (!isSuper) return;
       try {
         const data = await supabase.getAgencies();
-        setAgencies(data);
-        if (!targetAgencyId && data.length > 0) {
-          setTargetAgencyId(data[0].id);
+        if (mounted) {
+          setAgencies(data);
+          // Si aucune cible n'est définie (première visite SuperAdmin), on prend la première de la liste
+          setTargetAgencyId(prev => {
+             if (prev) return prev;
+             return data.length > 0 ? data[0].id : '';
+          });
         }
-      } catch (e) {
-        console.error(e);
+      } catch (error) {
+        console.error("Erreur fetching agencies list:", error);
       }
     };
 
-    loadAgencies();
-  }, [isSuper]); // Dépendance uniquement sur isSuper, targetAgencyId géré conditionnellement à l'intérieur
+    fetchAgenciesList();
+    return () => { mounted = false; };
+  }, [isSuper]);
 
-  /** Charger les détails de l’agence sélectionnée */
-  const loadAgency = useCallback(async () => {
+  // 2. Chargement des DÉTAILS de l'agence cible
+  const loadTargetAgencyDetails = useCallback(async () => {
     if (!targetAgencyId) return;
-
+    
     try {
       const data = await supabase.getAgency(targetAgencyId);
       if (data) {
         setAgency(data);
+        // Hydratation du formulaire
         setName(data.name || '');
         setCurrency(data.settings?.currency || 'GNF');
-        // Restauration des autres champs pour l'UI
         setReceiptHeader(data.settings?.whatsapp_receipt_header || '');
         setReceiptFooter(data.settings?.whatsapp_receipt_footer || '');
         setContactPhone(data.settings?.contact_phone || '');
@@ -73,14 +82,14 @@ const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang, notify }) =
       }
     } catch (e) { 
       console.error(e); 
-      if (notify) notify('error', 'Erreur chargement agence');
+      if (notify) notify('error', 'Impossible de charger les données de l\'agence');
     }
   }, [targetAgencyId, notify]);
 
-  // Déclenchement du chargement lors du changement de cible
+  // Déclencheur du chargement de détails
   useEffect(() => {
-    loadAgency();
-  }, [loadAgency]);
+    loadTargetAgencyDetails();
+  }, [loadTargetAgencyDetails]);
 
   const handleSave = async () => {
     if (!targetAgencyId) return;
@@ -101,7 +110,8 @@ const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang, notify }) =
       if (notify) notify('success', 'Paramètres sauvegardés');
       setTimeout(() => setSaved(false), 2000);
       
-      loadAgency();
+      // Rechargement frais des données
+      loadTargetAgencyDetails();
     } catch (e) { 
         if (notify) notify('error', "Erreur de sauvegarde");
     } finally { 
@@ -113,13 +123,18 @@ const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang, notify }) =
     e.preventDefault();
     if (newPassword.length < 6) return alert(t.passwordTooShort);
     setPwdLoading(true);
-    const success = await supabase.updatePassword(user.id, newPassword, user);
-    setPwdLoading(false);
-    if (success) {
-      setNewPassword('');
-      if (notify) notify('success', "Mot de passe mis à jour.");
-    } else {
-      if (notify) notify('error', "Erreur lors de la mise à jour.");
+    try {
+        const success = await supabase.updatePassword(user.id, newPassword, user);
+        if (success) {
+            setNewPassword('');
+            if (notify) notify('success', "Mot de passe mis à jour.");
+        } else {
+            throw new Error();
+        }
+    } catch {
+        if (notify) notify('error', "Erreur lors de la mise à jour.");
+    } finally {
+        setPwdLoading(false);
     }
   };
 
