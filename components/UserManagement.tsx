@@ -22,7 +22,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
   const [selectedAgencyFilter, setSelectedAgencyFilter] = useState('ALL');
   const [showAdd, setShowAdd] = useState(false);
   
-  // États pour les actions (Ajout, Suppression, Mot de passe)
+  // États pour les actions
   const [actionLoading, setActionLoading] = useState(false);
   const [passwordModalUser, setPasswordModalUser] = useState<UserProfile | null>(null);
   const [confirmAction, setConfirmAction] = useState<{type: 'ADD' | 'PWD' | 'DELETE', payload?: any} | null>(null);
@@ -37,17 +37,15 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
     agency_id: user.agency_id || ''
   });
 
-  // Chargement des données optimisé
+  // Chargement des données optimisé et typé
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      // Pour SuperAdmin: on charge utilisateurs + agences. Pour Admin: seulement utilisateurs.
-      const promises: [Promise<UserProfile[]>, Promise<Agency[]>] = [
-        supabase.getUsers(user.agency_id, user.role),
-        isSuper ? supabase.getAgencies() : Promise.resolve([])
-      ];
+      // Correction TypeScript: cast explicite du tableau vide pour correspondre au type Agency[]
+      const agenciesPromise = isSuper ? supabase.getAgencies() : Promise.resolve([] as Agency[]);
+      const usersPromise = supabase.getUsers(user.agency_id, user.role);
 
-      const [usersData, agenciesData] = await Promise.all(promises);
+      const [usersData, agenciesData] = await Promise.all([usersPromise, agenciesPromise]);
 
       // Filtrage sécurité : on ne montre pas les Super Admins dans la liste standard
       setUsers(isSuper ? usersData : usersData.filter(u => u.role !== UserRole.SUPER_ADMIN));
@@ -71,11 +69,9 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
     let defaultAgencyId = user.agency_id || '';
     
     if (isSuper) {
-      // Si un filtre est actif, on l'utilise comme agence par défaut
       if (selectedAgencyFilter !== 'ALL') {
         defaultAgencyId = selectedAgencyFilter;
       } else if (agencies.length > 0) {
-        // Sinon on prend la première agence disponible
         defaultAgencyId = agencies[0].id;
       }
     }
@@ -90,15 +86,13 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
     setShowAdd(true);
   };
 
-  // Filtrage côté client pour performance instantanée
   const filteredUsers = useMemo(() => {
     if (selectedAgencyFilter === 'ALL') return users;
     return users.filter(u => u.agency_id === selectedAgencyFilter);
   }, [users, selectedAgencyFilter]);
 
-  // Vérification des permissions sur une cible
   const canManage = (target: UserProfile) => {
-    if (user.id === target.id) return false; // On ne se modifie pas soi-même ici
+    if (user.id === target.id) return false;
     if (isSuper) return true;
     if (user.role === UserRole.ADMIN && target.role === UserRole.SELLER) return true;
     return false;
@@ -107,7 +101,6 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
   const handleAction = async () => {
     if (!confirmAction) return;
     
-    // Validation basique
     if (confirmAction.type === 'ADD') {
         if (!formData.email || !formData.password || !formData.agency_id) {
             alert("Veuillez remplir l'email, le mot de passe et choisir une agence.");
@@ -131,13 +124,13 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
               setPasswordModalUser(null);
               setResetPwdValue('');
           } else if (resetPwdValue.length < 6) {
-              alert("Le mot de passe doit faire au moins 6 caractères");
+              alert("Mot de passe trop court (min 6)");
               setActionLoading(false);
               return;
           }
           break;
       }
-      await loadData(); // Rafraîchissement
+      await loadData();
     } catch (e) { 
       console.error(e);
       alert("Une erreur est survenue.");
@@ -236,7 +229,6 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
         )}
       </div>
 
-      {/* MODAL CONFIRMATION (Delete & Add) */}
       {confirmAction && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-300">
           <div className="bg-white dark:bg-gray-800 w-full max-w-sm rounded-[2.5rem] p-10 shadow-2xl text-center border dark:border-gray-700">
@@ -276,7 +268,6 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
         </div>
       )}
 
-      {/* MODAL AJOUT */}
       {showAdd && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-300">
           <div className="bg-white dark:bg-gray-800 w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl border dark:border-gray-700">
@@ -357,7 +348,6 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
         </div>
       )}
 
-      {/* MODAL RESET PASSWORD */}
       {passwordModalUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-300">
           <div className="bg-white dark:bg-gray-800 w-full max-w-sm rounded-[2.5rem] p-10 shadow-2xl text-center border dark:border-gray-700">
