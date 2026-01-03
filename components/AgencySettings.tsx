@@ -14,7 +14,6 @@ const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang, notify }) =
   const t = translations[lang];
   const isSuper = user.role === UserRole.SUPER_ADMIN;
 
-  // États principaux
   const [agencies, setAgencies] = useState<Agency[]>([]);
   const [targetAgencyId, setTargetAgencyId] = useState<string>(user.agency_id || '');
   const [agency, setAgency] = useState<Agency | null>(null);
@@ -33,22 +32,21 @@ const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang, notify }) =
   const [isSaving, setIsSaving] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   
-  // États mot de passe
   const [newPassword, setNewPassword] = useState('');
   const [showPwd, setShowPwd] = useState(false);
   const [pwdLoading, setPwdLoading] = useState(false);
 
   // 1. Chargement de la LISTE des agences (Uniquement Super Admin)
   useEffect(() => {
-    let mounted = true;
+    if (!isSuper) return;
 
+    let mounted = true;
     const fetchAgenciesList = async () => {
-      if (!isSuper) return;
       try {
         const data = await supabase.getAgencies();
         if (mounted) {
           setAgencies(data);
-          // Si aucune cible n'est définie (première visite SuperAdmin), on prend la première de la liste
+          // Initialisation première agence si non définie
           setTargetAgencyId(prev => {
              if (prev) return prev;
              return data.length > 0 ? data[0].id : '';
@@ -63,7 +61,7 @@ const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang, notify }) =
     return () => { mounted = false; };
   }, [isSuper]);
 
-  // 2. Chargement des DÉTAILS de l'agence cible
+  // 2. Chargement des DÉTAILS de l'agence cible (Indépendant de la liste)
   const loadTargetAgencyDetails = useCallback(async () => {
     if (!targetAgencyId) return;
     
@@ -71,7 +69,7 @@ const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang, notify }) =
       const data = await supabase.getAgency(targetAgencyId);
       if (data) {
         setAgency(data);
-        // Hydratation du formulaire
+        // Hydratation complète du formulaire
         setName(data.name || '');
         setCurrency(data.settings?.currency || 'GNF');
         setReceiptHeader(data.settings?.whatsapp_receipt_header || '');
@@ -95,6 +93,7 @@ const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang, notify }) =
     if (!targetAgencyId) return;
     setIsSaving(true);
     try {
+      // On fusionne les paramètres existants pour ne pas perdre les modules ou autres configs
       await supabase.updateAgency(targetAgencyId, name, {
         ...agency?.settings,
         currency,
@@ -110,7 +109,6 @@ const AgencySettings: React.FC<AgencySettingsProps> = ({ user, lang, notify }) =
       if (notify) notify('success', 'Paramètres sauvegardés');
       setTimeout(() => setSaved(false), 2000);
       
-      // Rechargement frais des données
       loadTargetAgencyDetails();
     } catch (e) { 
         if (notify) notify('error', "Erreur de sauvegarde");

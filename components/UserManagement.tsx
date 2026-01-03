@@ -13,22 +13,17 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
   const t = translations[lang];
   const isSuper = user.role === UserRole.SUPER_ADMIN;
 
-  // États des données
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [agencies, setAgencies] = useState<Agency[]>([]);
   const [loading, setLoading] = useState(false);
-  
-  // États de filtrage et UI
   const [selectedAgencyFilter, setSelectedAgencyFilter] = useState('ALL');
   const [showAdd, setShowAdd] = useState(false);
-  
-  // États pour les actions
   const [actionLoading, setActionLoading] = useState(false);
+  
   const [passwordModalUser, setPasswordModalUser] = useState<UserProfile | null>(null);
   const [confirmAction, setConfirmAction] = useState<{type: 'ADD' | 'PWD' | 'DELETE', payload?: any} | null>(null);
   const [resetPwdValue, setResetPwdValue] = useState('');
 
-  // Formulaire d'ajout
   const [formData, setFormData] = useState({
     email: '', 
     password: '', 
@@ -37,24 +32,23 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
     agency_id: user.agency_id || ''
   });
 
-  // Chargement des données optimisé et typé
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      // Correction TypeScript: cast explicite du tableau vide pour correspondre au type Agency[]
-      const agenciesPromise = isSuper ? supabase.getAgencies() : Promise.resolve([] as Agency[]);
-      const usersPromise = supabase.getUsers(user.agency_id, user.role);
+      // Définition explicite des promesses pour garantir le typage du Promise.all
+      const pUsers: Promise<UserProfile[]> = supabase.getUsers(user.agency_id, user.role);
+      const pAgencies: Promise<Agency[]> = isSuper ? supabase.getAgencies() : Promise.resolve([]);
 
-      const [usersData, agenciesData] = await Promise.all([usersPromise, agenciesPromise]);
+      const [uData, aData] = await Promise.all([pUsers, pAgencies]);
 
-      // Filtrage sécurité : on ne montre pas les Super Admins dans la liste standard
-      setUsers(isSuper ? usersData : usersData.filter(u => u.role !== UserRole.SUPER_ADMIN));
+      // Logique stricte : le Super Admin voit tout le monde, l'Admin ne voit pas les Super Admins
+      setUsers(isSuper ? uData : uData.filter(u => u.role !== UserRole.SUPER_ADMIN));
       
       if (isSuper) {
-        setAgencies(agenciesData);
+        setAgencies(aData);
       }
-    } catch (error) {
-      console.error("Erreur chargement:", error);
+    } catch (e) {
+      console.error("Erreur chargement:", e);
     } finally {
       setLoading(false);
     }
@@ -64,10 +58,10 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
     loadData();
   }, [loadData]);
 
-  // Initialisation intelligente du formulaire d'ajout
   const handleOpenAddModal = () => {
     let defaultAgencyId = user.agency_id || '';
     
+    // Logique intelligente pour pré-remplir l'agence
     if (isSuper) {
       if (selectedAgencyFilter !== 'ALL') {
         defaultAgencyId = selectedAgencyFilter;
@@ -103,7 +97,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ user, lang }) => {
     
     if (confirmAction.type === 'ADD') {
         if (!formData.email || !formData.password || !formData.agency_id) {
-            alert("Veuillez remplir l'email, le mot de passe et choisir une agence.");
+            alert("Veuillez remplir tous les champs obligatoires (Email, MDP, Agence).");
             return;
         }
     }
